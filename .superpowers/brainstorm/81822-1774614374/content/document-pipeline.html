@@ -1,0 +1,202 @@
+<h2>Section 3: Document Pipeline & Chat Flow</h2>
+<p class="subtitle">How documents are processed and how chat requests flow through the system</p>
+
+<!-- Document Pipeline -->
+<div class="mockup">
+  <div class="mockup-header">Document Upload & Processing Pipeline</div>
+  <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 13px; line-height: 1.6;">
+    <div style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+
+      <!-- Upload -->
+      <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 8px; padding: 12px; width: 80%; text-align: center;">
+        <div style="color: #7c8aff; font-weight: bold;">User uploads file</div>
+        <div style="color: #888; font-size: 11px;">PDF, DOCX, TXT, CSV, images</div>
+      </div>
+
+      <div style="color: #555;">▼</div>
+
+      <!-- API receives -->
+      <div style="background: #1a2e1a; border: 1px solid #4a6a4a; border-radius: 8px; padding: 14px; width: 80%;">
+        <div style="color: #7cff8a; font-weight: bold; text-align: center; margin-bottom: 8px;">API: Upload Endpoint</div>
+        <div style="color: #aaa; font-size: 12px;">
+          • Save file to storage (local / S3)<br>
+          • Create <code>documents</code> record (status: pending)<br>
+          • Dispatch background task → return immediately
+        </div>
+      </div>
+
+      <div style="color: #555;">▼</div>
+
+      <!-- Worker processing -->
+      <div style="background: #2e1a1a; border: 1px solid #6a4a4a; border-radius: 8px; padding: 16px; width: 80%;">
+        <div style="color: #ff7c7c; font-weight: bold; text-align: center; margin-bottom: 10px;">BACKGROUND WORKER</div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 180px; background: #1f0d0d; border: 1px solid #4a2a2a; border-radius: 4px; padding: 10px;">
+            <div style="color: #ff9a9a; font-size: 12px; font-weight: bold;">1. Parse</div>
+            <div style="color: #888; font-size: 11px; margin-top: 4px;">
+              PDF → PyMuPDF / pdfplumber<br>
+              DOCX → python-docx<br>
+              Images → OCR microservice<br>
+              CSV/TXT → direct read
+            </div>
+          </div>
+          <div style="flex: 1; min-width: 180px; background: #1f0d0d; border: 1px solid #4a2a2a; border-radius: 4px; padding: 10px;">
+            <div style="color: #ff9a9a; font-size: 12px; font-weight: bold;">2. Decide Strategy</div>
+            <div style="color: #888; font-size: 11px; margin-top: 4px;">
+              Token count &lt; threshold?<br>
+              → <span style="color: #7cff8a;">SMALL</span>: store full text<br>
+              → <span style="color: #ffcc7c;">LARGE</span>: chunk + embed
+            </div>
+          </div>
+          <div style="flex: 1; min-width: 180px; background: #1f0d0d; border: 1px solid #4a2a2a; border-radius: 4px; padding: 10px;">
+            <div style="color: #ff9a9a; font-size: 12px; font-weight: bold;">3. Chunk & Embed</div>
+            <div style="color: #888; font-size: 11px; margin-top: 4px;">
+              Split by sections/paragraphs<br>
+              Embed via model's embeddings API<br>
+              Store vectors in pgvector<br>
+              Keep chunk ↔ doc mapping
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 10px; text-align: center; color: #888; font-size: 11px;">
+          Update document status: pending → processing → ready / failed
+        </div>
+      </div>
+
+      <div style="color: #555;">▼</div>
+
+      <div style="background: #1a2e2e; border: 1px solid #4a6a6a; border-radius: 8px; padding: 12px; width: 80%; text-align: center;">
+        <div style="color: #7cffee; font-weight: bold;">Document ready for chat</div>
+        <div style="color: #888; font-size: 11px;">Small docs: full text cached | Large docs: vectors indexed</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chat Flow -->
+<div style="margin-top: 24px;">
+  <div class="mockup">
+    <div class="mockup-header">Chat Request Flow</div>
+    <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 13px; line-height: 1.6;">
+      <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+
+        <!-- Left: Flow steps -->
+        <div style="flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 10px;">
+
+          <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 12px;">
+            <div style="background: #7c8aff; color: #000; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">1</div>
+            <div>
+              <div style="color: #7c8aff; font-weight: bold;">User sends message</div>
+              <div style="color: #888; font-size: 11px;">Text + optional attached doc IDs</div>
+            </div>
+          </div>
+
+          <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 12px;">
+            <div style="background: #7c8aff; color: #000; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">2</div>
+            <div>
+              <div style="color: #7c8aff; font-weight: bold;">Load conversation history</div>
+              <div style="color: #888; font-size: 11px;">From DB, trim to fit token budget</div>
+            </div>
+          </div>
+
+          <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 12px;">
+            <div style="background: #7c8aff; color: #000; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">3</div>
+            <div>
+              <div style="color: #7c8aff; font-weight: bold;">Retrieve document context</div>
+              <div style="color: #888; font-size: 11px;">Small docs → inject full text<br>Large docs → pgvector similarity search → top-k chunks</div>
+            </div>
+          </div>
+
+          <div style="background: #2e1a2e; border: 1px solid #6a4a6a; border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 12px;">
+            <div style="background: #cc7cff; color: #000; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">4</div>
+            <div>
+              <div style="color: #cc7cff; font-weight: bold;">Prompt Compiler</div>
+              <div style="color: #888; font-size: 11px;">Classify → select modules → compile system prompt → budget check</div>
+            </div>
+          </div>
+
+          <div style="background: #2e2e1a; border: 1px solid #6a6a4a; border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 12px;">
+            <div style="background: #ffcc7c; color: #000; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">5</div>
+            <div>
+              <div style="color: #ffcc7c; font-weight: bold;">Call LLM Provider</div>
+              <div style="color: #888; font-size: 11px;">system_prompt + messages → stream via team's configured model</div>
+            </div>
+          </div>
+
+          <div style="background: #1a2e1a; border: 1px solid #4a6a4a; border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 12px;">
+            <div style="background: #7cff8a; color: #000; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">6</div>
+            <div>
+              <div style="color: #7cff8a; font-weight: bold;">Stream response via SSE</div>
+              <div style="color: #888; font-size: 11px;">Tokens streamed to frontend as they arrive<br>Full response saved to DB on completion</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Data model -->
+        <div style="flex: 1; min-width: 260px;">
+          <div style="background: #111; border: 1px solid #333; border-radius: 8px; padding: 16px;">
+            <div style="color: #fff; font-weight: bold; margin-bottom: 12px;">Data Model</div>
+
+            <div style="margin-bottom: 12px;">
+              <div style="color: #7c8aff; font-size: 12px; font-weight: bold;">conversations</div>
+              <div style="color: #888; font-size: 11px; line-height: 1.7;">
+                id, team_id, user_id<br>
+                title (auto-generated)<br>
+                mode (nullable)<br>
+                document_ids[]<br>
+                created_at
+              </div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <div style="color: #7c8aff; font-size: 12px; font-weight: bold;">messages</div>
+              <div style="color: #888; font-size: 11px; line-height: 1.7;">
+                id, conversation_id<br>
+                role (user / assistant / system)<br>
+                content (text)<br>
+                token_count<br>
+                created_at
+              </div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <div style="color: #7c8aff; font-size: 12px; font-weight: bold;">documents</div>
+              <div style="color: #888; font-size: 11px; line-height: 1.7;">
+                id, team_id, user_id<br>
+                filename, file_path<br>
+                file_type, file_size<br>
+                status (pending/processing/ready/failed)<br>
+                strategy (full_inject / rag)<br>
+                full_text (nullable)<br>
+                token_count
+              </div>
+            </div>
+
+            <div>
+              <div style="color: #7c8aff; font-size: 12px; font-weight: bold;">document_chunks</div>
+              <div style="color: #888; font-size: 11px; line-height: 1.7;">
+                id, document_id<br>
+                chunk_index<br>
+                content (text)<br>
+                embedding (vector)<br>
+                token_count
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 20px; padding: 16px; background: #111; border-radius: 8px; border: 1px solid #333;">
+  <h3 style="margin-top: 0;">Key Points</h3>
+  <ul style="color: #ccc; line-height: 1.8;">
+    <li><strong>Upload is non-blocking</strong> — API returns immediately, worker processes in background, frontend polls status</li>
+    <li><strong>Hybrid threshold</strong> — configurable per team (e.g., docs under 8k tokens → full inject, over → RAG)</li>
+    <li><strong>Embedding model</strong> — configurable per team alongside their chat model (e.g., OpenAI text-embedding-3-small)</li>
+    <li><strong>OCR hook</strong> — if file is image or scanned PDF, worker calls external OCR microservice before parsing</li>
+    <li><strong>Documents are scoped to team</strong> — users in the same team can share docs within conversations</li>
+    <li><strong>Conversation history trimming</strong> — oldest messages trimmed first, always keep system prompt + last N turns</li>
+  </ul>
+</div>

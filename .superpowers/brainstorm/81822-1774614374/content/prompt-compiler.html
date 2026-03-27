@@ -1,0 +1,154 @@
+<h2>Section 2: Prompt Compiler Engine</h2>
+<p class="subtitle">The core engine that turns prompt packs into compiled system prompts per request</p>
+
+<div class="mockup">
+  <div class="mockup-header">Prompt Compilation Flow</div>
+  <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 13px; line-height: 1.6;">
+
+    <!-- Flow diagram -->
+    <div style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+
+      <!-- Step 1: Inputs -->
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; width: 100%;">
+        <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 8px; padding: 12px; min-width: 150px; text-align: center;">
+          <div style="color: #7c8aff; font-weight: bold;">User Message</div>
+          <div style="color: #888; font-size: 11px;">+ conversation history</div>
+        </div>
+        <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 8px; padding: 12px; min-width: 150px; text-align: center;">
+          <div style="color: #7c8aff; font-weight: bold;">Team Config</div>
+          <div style="color: #888; font-size: 11px;">pack ID, model, mode</div>
+        </div>
+        <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 8px; padding: 12px; min-width: 150px; text-align: center;">
+          <div style="color: #7c8aff; font-weight: bold;">Documents</div>
+          <div style="color: #888; font-size: 11px;">uploaded + retrieved chunks</div>
+        </div>
+      </div>
+
+      <div style="color: #555; font-size: 18px;">▼</div>
+
+      <!-- Step 2: Classifier -->
+      <div style="background: #2e1a2e; border: 1px solid #6a4a6a; border-radius: 8px; padding: 16px; width: 90%; max-width: 500px;">
+        <div style="color: #cc7cff; font-weight: bold; text-align: center; margin-bottom: 8px;">STEP 1: CLASSIFY REQUEST</div>
+        <div style="color: #aaa; font-size: 12px;">
+          • Keyword matching against module <code>use_when</code> tags<br>
+          • Detect task mode (analysis, implementation, tender, etc.)<br>
+          • Check if task form was used → mode is pre-selected
+        </div>
+      </div>
+
+      <div style="color: #555; font-size: 18px;">▼</div>
+
+      <!-- Step 3: Module Selection -->
+      <div style="background: #1a2e1a; border: 1px solid #4a6a4a; border-radius: 8px; padding: 16px; width: 90%; max-width: 500px;">
+        <div style="color: #7cff8a; font-weight: bold; text-align: center; margin-bottom: 8px;">STEP 2: SELECT MODULES</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px;">
+          <div style="background: #0d1f0d; border: 1px solid #3a5a3a; border-radius: 4px; padding: 8px; text-align: center;">
+            <div style="color: #8cff9a;">Layer A</div>
+            <div style="color: #666;">Always loaded</div>
+            <div style="color: #888; margin-top: 4px;">Identity, reasoning, execution, output rules</div>
+          </div>
+          <div style="background: #0d1f0d; border: 1px solid #3a5a3a; border-radius: 4px; padding: 8px; text-align: center;">
+            <div style="color: #8cff9a;">Layer B</div>
+            <div style="color: #666;">By classification</div>
+            <div style="color: #888; margin-top: 4px;">Domain modules matched to request</div>
+          </div>
+          <div style="background: #0d1f0d; border: 1px solid #3a5a3a; border-radius: 4px; padding: 8px; text-align: center;">
+            <div style="color: #8cff9a;">Layer C</div>
+            <div style="color: #666;">Per request</div>
+            <div style="color: #888; margin-top: 4px;">Doc chunks, task context, constraints</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="color: #555; font-size: 18px;">▼</div>
+
+      <!-- Step 4: Compile -->
+      <div style="background: #2e2e1a; border: 1px solid #6a6a4a; border-radius: 8px; padding: 16px; width: 90%; max-width: 500px;">
+        <div style="color: #ffcc7c; font-weight: bold; text-align: center; margin-bottom: 8px;">STEP 3: COMPILE SYSTEM PROMPT</div>
+        <div style="color: #aaa; font-size: 12px;">
+          <code style="color: #ffcc7c;">system_prompt =</code><br>
+          &nbsp;&nbsp;<code style="color: #7cff8a;">safety_wrapper</code> (hardcoded, highest priority)<br>
+          &nbsp;&nbsp;+ <code style="color: #7cff8a;">core_files</code> (Layer A from manifest)<br>
+          &nbsp;&nbsp;+ <code style="color: #7cff8a;">always_append</code> (from manifest)<br>
+          &nbsp;&nbsp;+ <code style="color: #7cff8a;">domain_modules</code> (Layer B, matched)<br>
+          &nbsp;&nbsp;+ <code style="color: #7cff8a;">mode_prompt</code> (analysis/implementation/etc.)<br>
+          &nbsp;&nbsp;+ <code style="color: #7cff8a;">doc_context</code> (Layer C, injected or retrieved)<br>
+          &nbsp;&nbsp;+ <code style="color: #7cff8a;">precedence_rules</code> (conflict resolution)
+        </div>
+      </div>
+
+      <div style="color: #555; font-size: 18px;">▼</div>
+
+      <!-- Step 5: Token budget -->
+      <div style="background: #2e1a1a; border: 1px solid #6a4a4a; border-radius: 8px; padding: 16px; width: 90%; max-width: 500px;">
+        <div style="color: #ff7c7c; font-weight: bold; text-align: center; margin-bottom: 8px;">STEP 4: TOKEN BUDGET CHECK</div>
+        <div style="color: #aaa; font-size: 12px;">
+          • Count tokens against model's context limit<br>
+          • If over budget: trim doc chunks first, then summarize domain modules<br>
+          • Reserve tokens for conversation history + response<br>
+          • Log final composition for debugging
+        </div>
+      </div>
+
+      <div style="color: #555; font-size: 18px;">▼</div>
+
+      <!-- Output -->
+      <div style="background: #1a2e2e; border: 1px solid #4a6a6a; border-radius: 8px; padding: 12px; min-width: 200px; text-align: center;">
+        <div style="color: #7cffee; font-weight: bold;">Send to LLM Provider</div>
+        <div style="color: #888; font-size: 11px;">system prompt + messages → stream response via SSE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Prompt Pack Structure -->
+<div style="margin-top: 20px;">
+  <h3>Prompt Pack Data Model</h3>
+  <div class="mockup">
+    <div class="mockup-header">How packs are stored and managed</div>
+    <div class="mockup-body" style="padding: 20px; font-family: monospace; font-size: 12px;">
+      <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 260px;">
+          <div style="color: #7c8aff; font-weight: bold; margin-bottom: 8px;">DB: prompt_packs table</div>
+          <div style="color: #aaa; line-height: 1.8;">
+            id, name, version<br>
+            team_id (owner)<br>
+            manifest (JSON — core, domains, always_append)<br>
+            created_at, updated_at
+          </div>
+        </div>
+        <div style="flex: 1; min-width: 260px;">
+          <div style="color: #7c8aff; font-weight: bold; margin-bottom: 8px;">DB: prompt_modules table</div>
+          <div style="color: #aaa; line-height: 1.8;">
+            id, pack_id (FK)<br>
+            filename, title<br>
+            layer (core / domain / always)<br>
+            tags[] (use_when keywords)<br>
+            priority, content (markdown text)<br>
+            max_tokens
+          </div>
+        </div>
+        <div style="flex: 1; min-width: 260px;">
+          <div style="color: #7c8aff; font-weight: bold; margin-bottom: 8px;">DB: task_modes table</div>
+          <div style="color: #aaa; line-height: 1.8;">
+            id, pack_id (FK)<br>
+            name (analysis, implementation, ...)<br>
+            prompt_text<br>
+            form_schema (JSON — for task forms)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 20px; padding: 16px; background: #111; border-radius: 8px; border: 1px solid #333;">
+  <h3 style="margin-top: 0;">Key Points</h3>
+  <ul style="color: #ccc; line-height: 1.8;">
+    <li><strong>Manifest lives in DB</strong> — admins edit via UI, but can also import from JSON file</li>
+    <li><strong>Module frontmatter</strong> (tags, priority, max_tokens) is parsed on upload and stored as columns for fast querying</li>
+    <li><strong>Classification is keyword-first</strong> — fast and predictable. Can add LLM-based classification later as an upgrade</li>
+    <li><strong>Token budgeting</strong> prevents context overflow — trims least-priority content first</li>
+    <li><strong>Compiled prompts can be cached</strong> per (pack_version + mode + matched_domains) tuple</li>
+  </ul>
+</div>

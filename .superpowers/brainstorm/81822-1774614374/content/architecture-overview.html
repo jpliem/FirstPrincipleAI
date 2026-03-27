@@ -1,0 +1,101 @@
+<h2>Section 1: High-Level Architecture</h2>
+<p class="subtitle">Modular monolith with background workers — "PromptBase"</p>
+
+<div class="mockup">
+  <div class="mockup-header">System Architecture</div>
+  <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 13px; line-height: 1.6;">
+    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+
+      <!-- Left column: User-facing -->
+      <div style="flex: 1; min-width: 280px;">
+        <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #7c8aff; font-weight: bold; margin-bottom: 8px;">🖥️ FRONTEND (React + Vite)</div>
+          <div style="color: #aaa; font-size: 12px;">
+            • Chat Interface (SSE streaming)<br>
+            • Task Forms (structured input)<br>
+            • Document Upload<br>
+            • Admin Dashboard<br>
+            • Team Management
+          </div>
+        </div>
+
+        <div style="text-align: center; color: #555; margin: 8px 0;">▼ HTTP / SSE ▼</div>
+
+        <div style="background: #1a2e1a; border: 1px solid #4a6a4a; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #7cff8a; font-weight: bold; margin-bottom: 8px;">⚡ FASTAPI APPLICATION</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+            <div style="background: #0d1f0d; border: 1px solid #3a5a3a; border-radius: 4px; padding: 8px;">
+              <div style="color: #8cff9a;">Auth Module</div>
+              <div style="color: #888;">JWT, roles, teams</div>
+            </div>
+            <div style="background: #0d1f0d; border: 1px solid #3a5a3a; border-radius: 4px; padding: 8px;">
+              <div style="color: #8cff9a;">Chat Module</div>
+              <div style="color: #888;">Conversations, SSE</div>
+            </div>
+            <div style="background: #0d1f0d; border: 1px solid #3a5a3a; border-radius: 4px; padding: 8px;">
+              <div style="color: #8cff9a;">Prompt Compiler</div>
+              <div style="color: #888;">Pack loading, routing</div>
+            </div>
+            <div style="background: #0d1f0d; border: 1px solid #3a5a3a; border-radius: 4px; padding: 8px;">
+              <div style="color: #8cff9a;">Admin Module</div>
+              <div style="color: #888;">Packs, teams, config</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column: Backend services -->
+      <div style="flex: 1; min-width: 280px;">
+        <div style="background: #2e1a1a; border: 1px solid #6a4a4a; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #ff7c7c; font-weight: bold; margin-bottom: 8px;">🔄 BACKGROUND WORKERS</div>
+          <div style="color: #aaa; font-size: 12px;">
+            • Document parsing (PyMuPDF, pdfplumber)<br>
+            • Text chunking & embedding<br>
+            • OCR microservice calls<br>
+            • Vector store indexing
+          </div>
+        </div>
+
+        <div style="background: #2e2e1a; border: 1px solid #6a6a4a; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #ffcc7c; font-weight: bold; margin-bottom: 8px;">🤖 LLM PROVIDER LAYER</div>
+          <div style="color: #aaa; font-size: 12px;">
+            • Custom abstraction (no LiteLLM)<br>
+            • Anthropic SDK → Claude<br>
+            • OpenAI SDK → GPT models<br>
+            • httpx → OpenRouter, Ollama<br>
+            • Per-team model config
+          </div>
+        </div>
+
+        <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 8px; padding: 16px;">
+          <div style="color: #7c8aff; font-weight: bold; margin-bottom: 8px;">🗄️ DATA LAYER</div>
+          <div style="color: #aaa; font-size: 12px;">
+            • PostgreSQL (users, teams, chats, configs)<br>
+            • pgvector (document embeddings)<br>
+            • Redis (task queue, session cache)<br>
+            • File storage (uploaded docs, prompt packs)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Docker footer -->
+    <div style="margin-top: 16px; background: #1a1a1a; border: 1px dashed #555; border-radius: 8px; padding: 12px; text-align: center;">
+      <div style="color: #7cc8ff; font-weight: bold;">🐳 Docker Compose</div>
+      <div style="color: #888; font-size: 12px; margin-top: 4px;">
+        web (React) → api (FastAPI) → worker (Celery) → db (Postgres+pgvector) → redis → file-storage
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 20px; padding: 16px; background: #111; border-radius: 8px; border: 1px solid #333;">
+  <h3 style="margin-top: 0;">Key Design Decisions</h3>
+  <ul style="color: #ccc; line-height: 1.8;">
+    <li><strong>Prompt Compiler</strong> is an internal module — loads packs from DB/filesystem, classifies requests, selects domain modules, compiles system prompt</li>
+    <li><strong>Background Workers</strong> (Celery + Redis) handle document processing so chat stays responsive</li>
+    <li><strong>LLM Provider Layer</strong> uses official SDKs directly — one interface, multiple backends</li>
+    <li><strong>File Storage</strong> is abstracted — local disk for dev, S3-compatible for production</li>
+    <li><strong>Each team</strong> gets: their own prompt pack, model config, user list, conversation history, document store</li>
+  </ul>
+</div>

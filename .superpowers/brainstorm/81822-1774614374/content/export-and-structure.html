@@ -1,0 +1,248 @@
+<h2>Section 5: Export Pipeline & Project Structure</h2>
+<p class="subtitle">Markdown responses → structured Word documents, plus Docker deployment</p>
+
+<!-- Export Pipeline -->
+<div class="mockup">
+  <div class="mockup-header">Document Export Pipeline</div>
+  <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 13px; line-height: 1.6;">
+    <div style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+
+      <div style="background: #1a1a2e; border: 1px solid #4a4a6a; border-radius: 8px; padding: 12px; width: 80%; text-align: center;">
+        <div style="color: #7c8aff; font-weight: bold;">AI Response (Markdown)</div>
+        <div style="color: #888; font-size: 11px;">Headers, lists, tables, code blocks, bold/italic</div>
+      </div>
+
+      <div style="color: #555;">▼</div>
+
+      <div style="background: #2e1a2e; border: 1px solid #6a4a6a; border-radius: 8px; padding: 16px; width: 80%;">
+        <div style="color: #cc7cff; font-weight: bold; text-align: center; margin-bottom: 10px;">EXPORT ENGINE (python-docx)</div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 160px; background: #1f0d1f; border: 1px solid #4a2a4a; border-radius: 4px; padding: 10px;">
+            <div style="color: #dd9aff; font-size: 12px; font-weight: bold;">1. Parse MD</div>
+            <div style="color: #888; font-size: 11px; margin-top: 4px;">
+              markdown → AST<br>
+              (via mistune or markdown-it-py)
+            </div>
+          </div>
+          <div style="flex: 1; min-width: 160px; background: #1f0d1f; border: 1px solid #4a2a4a; border-radius: 4px; padding: 10px;">
+            <div style="color: #dd9aff; font-size: 12px; font-weight: bold;">2. Map to DOCX</div>
+            <div style="color: #888; font-size: 11px; margin-top: 4px;">
+              # → Heading 1<br>
+              ## → Heading 2<br>
+              | table | → Word Table<br>
+              - list → Bullet list<br>
+              **bold** → Run bold<br>
+              `code` → Monospace run
+            </div>
+          </div>
+          <div style="flex: 1; min-width: 160px; background: #1f0d1f; border: 1px solid #4a2a4a; border-radius: 4px; padding: 10px;">
+            <div style="color: #dd9aff; font-size: 12px; font-weight: bold;">3. Apply Template</div>
+            <div style="color: #888; font-size: 11px; margin-top: 4px;">
+              Team branding<br>
+              Logo, headers, footers<br>
+              Page numbers<br>
+              Custom styles (colors, fonts)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="color: #555;">▼</div>
+
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; width: 80%;">
+        <div style="background: #1a2e1a; border: 1px solid #4a6a4a; border-radius: 8px; padding: 12px; min-width: 150px; text-align: center;">
+          <div style="color: #7cff8a; font-weight: bold;">📄 .docx</div>
+          <div style="color: #888; font-size: 11px;">Structured Word doc<br>with tables & formatting</div>
+        </div>
+        <div style="background: #1a2e2e; border: 1px solid #4a6a6a; border-radius: 8px; padding: 12px; min-width: 150px; text-align: center;">
+          <div style="color: #7cffee; font-weight: bold;">📄 .pdf</div>
+          <div style="color: #888; font-size: 11px;">Optional PDF export<br>(via LibreOffice headless)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export features -->
+    <div style="margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 220px; background: #111; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
+        <div style="color: #ffcc7c; font-weight: bold; font-size: 12px; margin-bottom: 6px;">Table Handling</div>
+        <div style="color: #888; font-size: 11px; line-height: 1.6;">
+          • MD pipe tables → Word tables with borders<br>
+          • Auto column width<br>
+          • Header row styling (bold, shaded)<br>
+          • Nested content in cells
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 220px; background: #111; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
+        <div style="color: #ffcc7c; font-weight: bold; font-size: 12px; margin-bottom: 6px;">Template System</div>
+        <div style="color: #888; font-size: 11px; line-height: 1.6;">
+          • Per-team .docx templates<br>
+          • Upload via admin UI<br>
+          • Defines styles, logo, headers/footers<br>
+          • Fallback to default template
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 220px; background: #111; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
+        <div style="color: #ffcc7c; font-weight: bold; font-size: 12px; margin-bottom: 6px;">Export Options</div>
+        <div style="color: #888; font-size: 11px; line-height: 1.6;">
+          • Single message export<br>
+          • Full conversation export<br>
+          • Selected messages export<br>
+          • Include/exclude metadata header
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Project Structure & Docker -->
+<div style="margin-top: 24px;">
+  <div class="mockup">
+    <div class="mockup-header">Project Structure & Docker Deployment</div>
+    <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 12px; line-height: 1.7;">
+      <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+
+        <!-- Project tree -->
+        <div style="flex: 1; min-width: 300px;">
+          <div style="color: #7c8aff; font-weight: bold; margin-bottom: 8px;">Project Structure</div>
+          <pre style="color: #aaa; margin: 0; font-size: 11px;">
+promptbase/
+├── docker-compose.yml
+├── .env.example
+│
+├── backend/
+│   ├── Dockerfile
+│   ├── pyproject.toml
+│   ├── alembic/              <span style="color: #555;"># DB migrations</span>
+│   │
+│   ├── app/
+│   │   ├── main.py           <span style="color: #555;"># FastAPI app</span>
+│   │   ├── config.py         <span style="color: #555;"># Settings</span>
+│   │   ├── database.py       <span style="color: #555;"># Postgres + pgvector</span>
+│   │   │
+│   │   ├── auth/
+│   │   │   ├── models.py     <span style="color: #555;"># User, Team</span>
+│   │   │   ├── routes.py     <span style="color: #555;"># Login, register, invite</span>
+│   │   │   └── service.py    <span style="color: #555;"># JWT, permissions</span>
+│   │   │
+│   │   ├── chat/
+│   │   │   ├── models.py     <span style="color: #555;"># Conversation, Message</span>
+│   │   │   ├── routes.py     <span style="color: #555;"># Chat + SSE endpoint</span>
+│   │   │   └── service.py    <span style="color: #555;"># Orchestrates the flow</span>
+│   │   │
+│   │   ├── compiler/
+│   │   │   ├── models.py     <span style="color: #555;"># PromptPack, Module, Mode</span>
+│   │   │   ├── classifier.py <span style="color: #555;"># Request classification</span>
+│   │   │   ├── compiler.py   <span style="color: #555;"># System prompt assembly</span>
+│   │   │   └── budget.py     <span style="color: #555;"># Token budgeting</span>
+│   │   │
+│   │   ├── documents/
+│   │   │   ├── models.py     <span style="color: #555;"># Document, Chunk</span>
+│   │   │   ├── routes.py     <span style="color: #555;"># Upload, status, list</span>
+│   │   │   ├── parser.py     <span style="color: #555;"># PDF, DOCX, TXT extraction</span>
+│   │   │   ├── chunker.py    <span style="color: #555;"># Text splitting + embedding</span>
+│   │   │   └── retriever.py  <span style="color: #555;"># pgvector similarity search</span>
+│   │   │
+│   │   ├── providers/
+│   │   │   ├── base.py       <span style="color: #555;"># Abstract LLM interface</span>
+│   │   │   ├── anthropic.py  <span style="color: #555;"># Claude via official SDK</span>
+│   │   │   ├── openai.py     <span style="color: #555;"># GPT via official SDK</span>
+│   │   │   ├── openrouter.py <span style="color: #555;"># OpenRouter via httpx</span>
+│   │   │   └── ollama.py     <span style="color: #555;"># Ollama via httpx</span>
+│   │   │
+│   │   ├── export/
+│   │   │   ├── routes.py     <span style="color: #555;"># Export endpoints</span>
+│   │   │   ├── renderer.py   <span style="color: #555;"># MD → DOCX converter</span>
+│   │   │   ├── templates/    <span style="color: #555;"># Default .docx templates</span>
+│   │   │   └── pdf.py        <span style="color: #555;"># Optional PDF via LibreOffice</span>
+│   │   │
+│   │   ├── admin/
+│   │   │   └── routes.py     <span style="color: #555;"># Pack CRUD, team mgmt, etc.</span>
+│   │   │
+│   │   └── workers/
+│   │       └── tasks.py      <span style="color: #555;"># Celery tasks (doc processing)</span>
+│   │
+│   └── tests/
+│
+├── frontend/
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── Chat.tsx
+│   │   │   ├── Admin.tsx
+│   │   │   └── Login.tsx
+│   │   ├── components/
+│   │   │   ├── ChatMessage.tsx
+│   │   │   ├── DocumentUpload.tsx
+│   │   │   ├── ModeSelector.tsx
+│   │   │   ├── PackEditor.tsx
+│   │   │   └── ExportButton.tsx
+│   │   ├── hooks/
+│   │   │   ├── useSSE.ts
+│   │   │   └── useAuth.ts
+│   │   └── api/
+│   │       └── client.ts
+│   └── vite.config.ts
+│
+└── nginx/
+    └── nginx.conf            <span style="color: #555;"># Reverse proxy</span></pre>
+        </div>
+
+        <!-- Docker compose -->
+        <div style="flex: 1; min-width: 280px;">
+          <div style="color: #7cffee; font-weight: bold; margin-bottom: 8px;">Docker Compose Services</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+
+            <div style="background: #0d1f1f; border: 1px solid #2a4a4a; border-radius: 6px; padding: 10px;">
+              <div style="color: #7cffee; font-weight: bold; font-size: 12px;">nginx</div>
+              <div style="color: #888; font-size: 11px;">Reverse proxy, serves frontend static, routes /api → backend</div>
+              <div style="color: #555; font-size: 10px; margin-top: 4px;">Port 80 → exposed</div>
+            </div>
+
+            <div style="background: #0d1f0d; border: 1px solid #2a4a2a; border-radius: 6px; padding: 10px;">
+              <div style="color: #7cff8a; font-weight: bold; font-size: 12px;">web (frontend)</div>
+              <div style="color: #888; font-size: 11px;">React + Vite build → static files served by nginx</div>
+              <div style="color: #555; font-size: 10px; margin-top: 4px;">Build stage only</div>
+            </div>
+
+            <div style="background: #0d1f0d; border: 1px solid #2a4a2a; border-radius: 6px; padding: 10px;">
+              <div style="color: #7cff8a; font-weight: bold; font-size: 12px;">api (FastAPI)</div>
+              <div style="color: #888; font-size: 11px;">Main application — auth, chat, compiler, admin, export</div>
+              <div style="color: #555; font-size: 10px; margin-top: 4px;">Port 8000 → internal</div>
+            </div>
+
+            <div style="background: #1f0d0d; border: 1px solid #4a2a2a; border-radius: 6px; padding: 10px;">
+              <div style="color: #ff7c7c; font-weight: bold; font-size: 12px;">worker (Celery)</div>
+              <div style="color: #888; font-size: 11px;">Document processing, chunking, embedding</div>
+              <div style="color: #555; font-size: 10px; margin-top: 4px;">Same image as api, different entrypoint</div>
+            </div>
+
+            <div style="background: #1f1f0d; border: 1px solid #4a4a2a; border-radius: 6px; padding: 10px;">
+              <div style="color: #ffcc7c; font-weight: bold; font-size: 12px;">db (PostgreSQL + pgvector)</div>
+              <div style="color: #888; font-size: 11px;">All relational data + vector embeddings</div>
+              <div style="color: #555; font-size: 10px; margin-top: 4px;">Port 5432 → internal, volume persisted</div>
+            </div>
+
+            <div style="background: #1f0d0d; border: 1px solid #4a2a2a; border-radius: 6px; padding: 10px;">
+              <div style="color: #ff9a7c; font-weight: bold; font-size: 12px;">redis</div>
+              <div style="color: #888; font-size: 11px;">Celery broker + session cache</div>
+              <div style="color: #555; font-size: 10px; margin-top: 4px;">Port 6379 → internal</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 20px; padding: 16px; background: #111; border-radius: 8px; border: 1px solid #333;">
+  <h3 style="margin-top: 0;">Key Points</h3>
+  <ul style="color: #ccc; line-height: 1.8;">
+    <li><strong>Export module</strong> uses python-docx — parses markdown AST, maps each node to Word elements (headings, tables, lists, runs)</li>
+    <li><strong>Per-team Word templates</strong> — admins upload a .docx template with custom styles, logo, headers/footers. Exports inherit the template.</li>
+    <li><strong>PDF optional</strong> — via LibreOffice headless in Docker (libreoffice-still package). Only if teams need it.</li>
+    <li><strong>Export scope</strong> — single message, selected messages, or full conversation. User picks from a dropdown on each message or conversation menu.</li>
+    <li><strong>Nginx</strong> as reverse proxy simplifies deployment — one port exposed, handles SSL termination, serves static frontend assets</li>
+    <li><strong>Same Docker image</strong> for api and worker — different entrypoint (uvicorn vs celery). Reduces build time and image management.</li>
+  </ul>
+</div>

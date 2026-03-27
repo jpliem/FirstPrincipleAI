@@ -1,0 +1,8 @@
+{"type":"server-started","port":53947,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:53947","screen_dir":"/Users/jonathan/Documents/Github/FirstPrincipleAI/.superpowers/brainstorm/81822-1774614374/content","state_dir":"/Users/jonathan/Documents/Github/FirstPrincipleAI/.superpowers/brainstorm/81822-1774614374/state"}
+{"type":"screen-added","file":"/Users/jonathan/Documents/Github/FirstPrincipleAI/.superpowers/brainstorm/81822-1774614374/content/architecture-overview.html"}
+{"type":"screen-added","file":"/Users/jonathan/Documents/Github/FirstPrincipleAI/.superpowers/brainstorm/81822-1774614374/content/prompt-compiler.html"}
+{"type":"screen-added","file":"/Users/jonathan/Documents/Github/FirstPrincipleAI/.superpowers/brainstorm/81822-1774614374/content/document-pipeline.html"}
+{"type":"screen-added","file":"/Users/jonathan/Documents/Github/FirstPrincipleAI/.superpowers/brainstorm/81822-1774614374/content/frontend-ui.html"}
+{"type":"screen-added","file":"/Users/jonathan/Documents/Github/FirstPrincipleAI/.superpowers/brainstorm/81822-1774614374/content/export-and-structure.html"}
+{"type":"screen-added","file":"/Users/jonathan/Documents/Github/FirstPrincipleAI/.superpowers/brainstorm/81822-1774614374/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

@@ -1,0 +1,227 @@
+<h2>Section 4: Frontend UI Layout</h2>
+<p class="subtitle">What end users and admins see</p>
+
+<!-- Chat Interface Mockup -->
+<div class="mockup">
+  <div class="mockup-header">Chat Interface — End User View</div>
+  <div class="mockup-body" style="padding: 0; font-family: -apple-system, sans-serif; font-size: 13px; height: 480px; display: flex;">
+
+    <!-- Sidebar -->
+    <div style="width: 240px; background: #0d0d0d; border-right: 1px solid #2a2a2a; display: flex; flex-direction: column; flex-shrink: 0;">
+      <div style="padding: 16px; border-bottom: 1px solid #2a2a2a;">
+        <div style="background: #7c8aff; color: #000; border-radius: 6px; padding: 8px 12px; text-align: center; font-weight: bold; font-size: 12px; cursor: pointer;">+ New Chat</div>
+      </div>
+
+      <!-- Mode selector -->
+      <div style="padding: 12px 16px; border-bottom: 1px solid #2a2a2a;">
+        <div style="color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Task Mode</div>
+        <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 6px 10px; color: #ccc; font-size: 12px; display: flex; justify-content: space-between;">
+          <span>General Chat</span>
+          <span style="color: #555;">▼</span>
+        </div>
+      </div>
+
+      <!-- Documents -->
+      <div style="padding: 12px 16px; border-bottom: 1px solid #2a2a2a;">
+        <div style="color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Documents</div>
+        <div style="background: #1a1a1a; border: 1px dashed #444; border-radius: 4px; padding: 12px; text-align: center; color: #555; font-size: 11px; cursor: pointer;">
+          📎 Drop files or click
+        </div>
+        <div style="margin-top: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 4px 0; color: #aaa; font-size: 11px;">
+            <span style="color: #ff7c7c;">📄</span> tender_spec.pdf
+            <span style="color: #7cff8a; font-size: 9px; margin-left: auto;">ready</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; padding: 4px 0; color: #aaa; font-size: 11px;">
+            <span style="color: #7c8aff;">📄</span> requirements.docx
+            <span style="color: #ffcc7c; font-size: 9px; margin-left: auto;">processing...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Conversation history -->
+      <div style="padding: 12px 16px; flex: 1; overflow: hidden;">
+        <div style="color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Recent</div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <div style="padding: 8px; background: #1a1a2e; border-radius: 4px; color: #aaa; font-size: 11px; border-left: 2px solid #7c8aff;">Tender response draft</div>
+          <div style="padding: 8px; border-radius: 4px; color: #666; font-size: 11px;">BOM review notes</div>
+          <div style="padding: 8px; border-radius: 4px; color: #666; font-size: 11px;">Architecture analysis</div>
+          <div style="padding: 8px; border-radius: 4px; color: #666; font-size: 11px;">QC checklist generation</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main chat area -->
+    <div style="flex: 1; display: flex; flex-direction: column;">
+      <!-- Header -->
+      <div style="padding: 12px 20px; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <span style="color: #fff; font-weight: bold;">Tender response draft</span>
+          <span style="color: #555; font-size: 11px; margin-left: 8px;">General Chat</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <span style="color: #555; font-size: 11px; background: #1a1a1a; padding: 4px 8px; border-radius: 4px;">Claude 3.5 Sonnet</span>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div style="flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;">
+        <!-- User message -->
+        <div style="display: flex; justify-content: flex-end;">
+          <div style="background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px 12px 4px 12px; padding: 12px 16px; max-width: 70%; color: #ccc; font-size: 13px;">
+            Review the tender spec I uploaded and identify the key compliance requirements we need to address.
+          </div>
+        </div>
+
+        <!-- Assistant message -->
+        <div style="display: flex; justify-content: flex-start;">
+          <div style="background: #111; border: 1px solid #2a2a2a; border-radius: 12px 12px 12px 4px; padding: 12px 16px; max-width: 70%; color: #ccc; font-size: 13px; line-height: 1.6;">
+            <div style="margin-bottom: 8px;">Based on the tender specification document, here are the key compliance requirements:</div>
+            <div style="color: #aaa; font-size: 12px;">
+              <strong style="color: #7cff8a;">1. Technical Compliance</strong><br>
+              • System must support IEC 61131-3 PLC programming...<br>
+              • Field devices must operate in -20°C to 55°C range...<br><br>
+              <strong style="color: #7cff8a;">2. Documentation Requirements</strong><br>
+              • Full BOM with manufacturer part numbers...<br>
+              • Test protocols per IEC 62443...<br><br>
+              <span style="color: #7c8aff;">▊</span> <span style="color: #555; font-size: 11px;">streaming...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input area -->
+      <div style="padding: 16px 20px; border-top: 1px solid #2a2a2a;">
+        <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 12px; display: flex; align-items: flex-end; gap: 8px;">
+          <div style="flex: 1; color: #555; font-size: 13px;">Ask about your documents...</div>
+          <div style="background: #7c8aff; color: #000; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: bold; cursor: pointer;">Send</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Dashboard Mockup -->
+<div style="margin-top: 24px;">
+  <div class="mockup">
+    <div class="mockup-header">Admin Dashboard — Prompt Pack Management</div>
+    <div class="mockup-body" style="padding: 0; font-family: -apple-system, sans-serif; font-size: 13px; height: 420px; display: flex;">
+
+      <!-- Admin sidebar -->
+      <div style="width: 200px; background: #0d0d0d; border-right: 1px solid #2a2a2a; padding: 16px;">
+        <div style="color: #fff; font-weight: bold; font-size: 14px; margin-bottom: 20px;">⚙️ Admin</div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <div style="padding: 8px 10px; border-radius: 4px; color: #666; font-size: 12px;">Dashboard</div>
+          <div style="padding: 8px 10px; background: #1a1a2e; border-radius: 4px; color: #7c8aff; font-size: 12px; border-left: 2px solid #7c8aff;">Prompt Packs</div>
+          <div style="padding: 8px 10px; border-radius: 4px; color: #666; font-size: 12px;">Task Modes</div>
+          <div style="padding: 8px 10px; border-radius: 4px; color: #666; font-size: 12px;">Teams</div>
+          <div style="padding: 8px 10px; border-radius: 4px; color: #666; font-size: 12px;">Users</div>
+          <div style="padding: 8px 10px; border-radius: 4px; color: #666; font-size: 12px;">LLM Providers</div>
+          <div style="padding: 8px 10px; border-radius: 4px; color: #666; font-size: 12px;">Usage & Logs</div>
+        </div>
+      </div>
+
+      <!-- Main content -->
+      <div style="flex: 1; display: flex; flex-direction: column;">
+        <!-- Header -->
+        <div style="padding: 16px 24px; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; align-items: center;">
+          <div style="color: #fff; font-weight: bold; font-size: 16px;">Prompt Packs</div>
+          <div style="display: flex; gap: 8px;">
+            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 6px 12px; color: #aaa; font-size: 12px; cursor: pointer;">📥 Import JSON</div>
+            <div style="background: #7c8aff; color: #000; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: bold; cursor: pointer;">+ New Pack</div>
+          </div>
+        </div>
+
+        <!-- Pack list -->
+        <div style="flex: 1; padding: 20px 24px; overflow-y: auto;">
+          <!-- Pack card -->
+          <div style="background: #111; border: 1px solid #2a2a2a; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+              <div>
+                <div style="color: #fff; font-weight: bold;">Intercon v2</div>
+                <div style="color: #888; font-size: 11px; margin-top: 4px;">First-principles reasoning + engineering + business ops</div>
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                  <span style="background: #1a2e1a; color: #7cff8a; font-size: 10px; padding: 3px 8px; border-radius: 10px;">4 core</span>
+                  <span style="background: #2e2e1a; color: #ffcc7c; font-size: 10px; padding: 3px 8px; border-radius: 10px;">6 domain</span>
+                  <span style="background: #1a1a2e; color: #7c8aff; font-size: 10px; padding: 3px 8px; border-radius: 10px;">1 always</span>
+                  <span style="background: #2e1a2e; color: #cc7cff; font-size: 10px; padding: 3px 8px; border-radius: 10px;">4 modes</span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <div style="color: #555; font-size: 11px; background: #1a1a1a; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Edit</div>
+                <div style="color: #555; font-size: 11px; background: #1a1a1a; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Export</div>
+              </div>
+            </div>
+
+            <!-- Modules preview -->
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #2a2a2a;">
+              <div style="color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Modules</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px;">
+                <span style="background: #0d1f0d; color: #7cff8a; padding: 4px 8px; border-radius: 4px;">00 Identity & Principles</span>
+                <span style="background: #0d1f0d; color: #7cff8a; padding: 4px 8px; border-radius: 4px;">01 Reasoning Rules</span>
+                <span style="background: #0d1f0d; color: #7cff8a; padding: 4px 8px; border-radius: 4px;">02 Execution Rules</span>
+                <span style="background: #0d1f0d; color: #7cff8a; padding: 4px 8px; border-radius: 4px;">03 Output Rules</span>
+                <span style="background: #1f1f0d; color: #ffcc7c; padding: 4px 8px; border-radius: 4px;">17 Embedded/IoT</span>
+                <span style="background: #1f1f0d; color: #ffcc7c; padding: 4px 8px; border-radius: 4px;">18 Business Apps</span>
+                <span style="background: #1f1f0d; color: #ffcc7c; padding: 4px 8px; border-radius: 4px;">19 AI/ML Ops</span>
+                <span style="color: #555; padding: 4px;">+4 more</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Another pack -->
+          <div style="background: #111; border: 1px solid #2a2a2a; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+              <div>
+                <div style="color: #fff; font-weight: bold;">Sales Engineering Pack</div>
+                <div style="color: #888; font-size: 11px; margin-top: 4px;">Proposal writing, pricing, technical responses</div>
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                  <span style="background: #1a2e1a; color: #7cff8a; font-size: 10px; padding: 3px 8px; border-radius: 10px;">3 core</span>
+                  <span style="background: #2e2e1a; color: #ffcc7c; font-size: 10px; padding: 3px 8px; border-radius: 10px;">2 domain</span>
+                  <span style="background: #2e1a2e; color: #cc7cff; font-size: 10px; padding: 3px 8px; border-radius: 10px;">3 modes</span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <div style="color: #555; font-size: 11px; background: #1a1a1a; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Edit</div>
+                <div style="color: #555; font-size: 11px; background: #1a1a1a; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Export</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Another pack -->
+          <div style="background: #111; border: 1px solid #2a2a2a; border-radius: 8px; padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+              <div>
+                <div style="color: #fff; font-weight: bold;">Customer Support Pack</div>
+                <div style="color: #888; font-size: 11px; margin-top: 4px;">Product knowledge, troubleshooting, escalation</div>
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                  <span style="background: #1a2e1a; color: #7cff8a; font-size: 10px; padding: 3px 8px; border-radius: 10px;">2 core</span>
+                  <span style="background: #2e2e1a; color: #ffcc7c; font-size: 10px; padding: 3px 8px; border-radius: 10px;">4 domain</span>
+                  <span style="background: #2e1a2e; color: #cc7cff; font-size: 10px; padding: 3px 8px; border-radius: 10px;">2 modes</span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <div style="color: #555; font-size: 11px; background: #1a1a1a; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Edit</div>
+                <div style="color: #555; font-size: 11px; background: #1a1a1a; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Export</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 20px; padding: 16px; background: #111; border-radius: 8px; border: 1px solid #333;">
+  <h3 style="margin-top: 0;">Frontend Structure</h3>
+  <ul style="color: #ccc; line-height: 1.8;">
+    <li><strong>Chat view</strong> — sidebar with mode selector, doc upload, conversation list. Main area is the chat with streaming.</li>
+    <li><strong>Task forms</strong> — when a mode has a form_schema, sidebar shows structured input fields instead of free chat</li>
+    <li><strong>Admin: Prompt Packs</strong> — CRUD for packs, import/export JSON manifests, inline module editor (markdown)</li>
+    <li><strong>Admin: Task Modes</strong> — create modes with prompt text + optional form schema builder</li>
+    <li><strong>Admin: Teams</strong> — assign packs to teams, configure model, set token thresholds</li>
+    <li><strong>Admin: Users</strong> — invite, roles (admin/member), team assignment</li>
+    <li><strong>Admin: LLM Providers</strong> — configure API keys, endpoints, available models per provider</li>
+    <li><strong>Admin: Usage & Logs</strong> — token usage per team/user, compiled prompt logs for debugging</li>
+  </ul>
+</div>
