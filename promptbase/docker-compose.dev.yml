@@ -1,0 +1,54 @@
+services:
+  api:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - upload_data:/app/uploads
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build:
+      context: ./backend
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    volumes:
+      - ./backend:/app
+      - upload_data:/app/uploads
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: promptbase
+      POSTGRES_PASSWORD: promptbase
+      POSTGRES_DB: promptbase
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U promptbase"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pg_data:
+  upload_data:
