@@ -47,6 +47,7 @@ export interface Document {
   status: 'pending' | 'processing' | 'ready' | 'failed'
   strategy: 'full_inject' | 'rag' | null
   token_count: number
+  conversation_id?: string | null
   created_at: string
 }
 
