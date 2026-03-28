@@ -16,10 +16,62 @@ from app.chat.schemas import (
     MessageResponse,
 )
 from app.chat.service import get_or_create_conversation, stream_chat_response
+from app.config import settings
 from app.database import get_db
 from app.providers.base import LLMConfig
+from app.providers.models import LLMProviderConfig, TeamLLMConfig
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+
+async def _load_llm_config(db: AsyncSession, team_id: uuid.UUID) -> tuple[str, LLMConfig]:
+    """Load LLM provider config for a team. Falls back to env defaults."""
+    # Try team-specific config first
+    result = await db.execute(select(TeamLLMConfig).where(TeamLLMConfig.team_id == team_id))
+    team_config = result.scalar_one_or_none()
+
+    if team_config:
+        # Load provider's API key
+        provider_result = await db.execute(
+            select(LLMProviderConfig).where(LLMProviderConfig.name == team_config.provider_name)
+        )
+        provider = provider_result.scalar_one_or_none()
+        api_key = provider.api_key_encrypted if provider else ""
+        base_url = provider.base_url if provider else ""
+
+        return team_config.provider_name, LLMConfig(
+            model=team_config.chat_model,
+            api_key=api_key or "",
+            base_url=base_url or "",
+            temperature=team_config.temperature,
+            max_tokens=team_config.max_tokens_per_request,
+        )
+
+    # Fallback: try to find any configured provider from env
+    if settings.anthropic_api_key:
+        return "anthropic", LLMConfig(
+            model="claude-sonnet-4-20250514",
+            api_key=settings.anthropic_api_key,
+            temperature=0.7, max_tokens=4096,
+        )
+    if settings.openai_api_key:
+        return "openai", LLMConfig(
+            model="gpt-4o",
+            api_key=settings.openai_api_key,
+            temperature=0.7, max_tokens=4096,
+        )
+    if settings.openrouter_api_key:
+        return "openrouter", LLMConfig(
+            model="anthropic/claude-sonnet-4-20250514",
+            api_key=settings.openrouter_api_key,
+            temperature=0.7, max_tokens=4096,
+        )
+    # Ollama doesn't need an API key
+    return "ollama", LLMConfig(
+        model="llama3",
+        base_url=settings.ollama_base_url,
+        temperature=0.7, max_tokens=4096,
+    )
 
 
 @router.post("/stream")
@@ -36,17 +88,13 @@ async def chat_stream(
         db, body.conversation_id, body.team_id, user.id, body.mode, body.document_ids
     )
 
-    # TODO: Load provider config from team_llm_config table
-    llm_config = LLMConfig(
-        model="claude-sonnet-4-20250514", api_key="",
-        temperature=0.7, max_tokens=4096,
-    )
+    provider_name, llm_config = await _load_llm_config(db, body.team_id)
 
     async def event_stream():
         yield f"data: {{\"conversation_id\": \"{conversation.id}\"}}\n\n"
         async for token in stream_chat_response(
             db, conversation, body.message, body.document_ids,
-            provider_name="anthropic", llm_config=llm_config,
+            provider_name=provider_name, llm_config=llm_config,
         ):
             escaped = token.replace("\n", "\\n")
             yield f"data: {escaped}\n\n"

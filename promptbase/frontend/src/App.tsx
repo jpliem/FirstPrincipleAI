@@ -9,6 +9,7 @@ import AdminPacks from './pages/admin/AdminPacks'
 import AdminModes from './pages/admin/AdminModes'
 import AdminTeams from './pages/admin/AdminTeams'
 import AdminUsers from './pages/admin/AdminUsers'
+import AdminProviders from './pages/admin/AdminProviders'
 import InvitePage from './pages/InvitePage'
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="packs/:packId/modes" element={<AdminModes />} />
           <Route path="teams" element={<AdminTeams />} />
           <Route path="users" element={<AdminUsers />} />
+          <Route path="providers" element={<AdminProviders />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

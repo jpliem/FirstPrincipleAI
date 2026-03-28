@@ -1,10 +1,11 @@
 import { NavLink, Outlet, Link } from 'react-router-dom'
-import { Package, Users, Building2, ChevronLeft } from 'lucide-react'
+import { Package, Users, Building2, ChevronLeft, Cpu } from 'lucide-react'
 
 const NAV = [
   { to: '/admin/packs', label: 'Prompt Packs', icon: Package },
   { to: '/admin/teams', label: 'Teams', icon: Building2 },
   { to: '/admin/users', label: 'Users', icon: Users },
+  { to: '/admin/providers', label: 'LLM Providers', icon: Cpu },
 ]
 
 export default function AdminLayout() {

@@ -215,3 +215,154 @@ async def assign_pack_to_team(
     team.pack_id = pack_id
     await db.commit()
     return {"team_id": str(team_id), "pack_id": str(pack_id)}
+
+
+# --- LLM Provider Config ---
+
+from app.providers.models import LLMProviderConfig, TeamLLMConfig
+from pydantic import BaseModel
+
+
+class LLMProviderConfigCreate(BaseModel):
+    name: str  # anthropic, openai, openrouter, ollama
+    base_url: str | None = None
+    api_key: str | None = None
+    is_enabled: bool = True
+
+
+class LLMProviderConfigResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    base_url: str | None
+    has_api_key: bool
+    is_enabled: bool
+
+    model_config = {"from_attributes": True}
+
+
+class TeamLLMConfigCreate(BaseModel):
+    provider_name: str
+    chat_model: str
+    embedding_model: str = "text-embedding-3-small"
+    max_tokens_per_request: int = 4096
+    temperature: float = 0.7
+
+
+class TeamLLMConfigResponse(BaseModel):
+    id: uuid.UUID
+    team_id: uuid.UUID
+    provider_name: str
+    chat_model: str
+    embedding_model: str
+    max_tokens_per_request: int
+    temperature: float
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/providers", response_model=list[LLMProviderConfigResponse])
+async def list_providers(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    result = await db.execute(select(LLMProviderConfig))
+    providers = result.scalars().all()
+    return [
+        LLMProviderConfigResponse(
+            id=p.id, name=p.name, base_url=p.base_url,
+            has_api_key=bool(p.api_key_encrypted), is_enabled=p.is_enabled,
+        )
+        for p in providers
+    ]
+
+
+@router.post("/providers", status_code=status.HTTP_201_CREATED)
+async def create_or_update_provider(
+    body: LLMProviderConfigCreate,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    result = await db.execute(select(LLMProviderConfig).where(LLMProviderConfig.name == body.name))
+    provider = result.scalar_one_or_none()
+
+    if provider:
+        provider.base_url = body.base_url
+        if body.api_key:
+            provider.api_key_encrypted = body.api_key  # TODO: encrypt in production
+        provider.is_enabled = body.is_enabled
+    else:
+        provider = LLMProviderConfig(
+            name=body.name,
+            base_url=body.base_url,
+            api_key_encrypted=body.api_key,  # TODO: encrypt in production
+            is_enabled=body.is_enabled,
+        )
+        db.add(provider)
+
+    await db.commit()
+    await db.refresh(provider)
+    return {"id": str(provider.id), "name": provider.name}
+
+
+@router.delete("/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_provider(
+    provider_id: uuid.UUID,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    result = await db.execute(select(LLMProviderConfig).where(LLMProviderConfig.id == provider_id))
+    provider = result.scalar_one_or_none()
+    if not provider:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await db.delete(provider)
+    await db.commit()
+
+
+@router.get("/teams/{team_id}/llm-config", response_model=TeamLLMConfigResponse | None)
+async def get_team_llm_config(
+    team_id: uuid.UUID,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(TeamLLMConfig).where(TeamLLMConfig.team_id == team_id))
+    config = result.scalar_one_or_none()
+    if not config:
+        return None
+    return config
+
+
+@router.put("/teams/{team_id}/llm-config", response_model=TeamLLMConfigResponse)
+async def set_team_llm_config(
+    team_id: uuid.UUID, body: TeamLLMConfigCreate,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    role = await get_user_team_role(db, user.id, team_id)
+    if role != "admin" and not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    result = await db.execute(select(TeamLLMConfig).where(TeamLLMConfig.team_id == team_id))
+    config = result.scalar_one_or_none()
+
+    if config:
+        config.provider_name = body.provider_name
+        config.chat_model = body.chat_model
+        config.embedding_model = body.embedding_model
+        config.max_tokens_per_request = body.max_tokens_per_request
+        config.temperature = body.temperature
+    else:
+        config = TeamLLMConfig(
+            team_id=team_id,
+            provider_name=body.provider_name,
+            chat_model=body.chat_model,
+            embedding_model=body.embedding_model,
+            max_tokens_per_request=body.max_tokens_per_request,
+            temperature=body.temperature,
+        )
+        db.add(config)
+
+    await db.commit()
+    await db.refresh(config)
+    return config
