@@ -13,10 +13,9 @@ interface Props {
   conversation: Conversation | null
   onConversationCreated: (conv: Conversation) => void
   activeMode: TaskMode | null
-  selectedDocIds: string[]
 }
 
-export default function ChatMain({ team, conversation, onConversationCreated, activeMode, selectedDocIds }: Props) {
+export default function ChatMain({ team, conversation, onConversationCreated, activeMode }: Props) {
   const queryClient = useQueryClient()
   const { startStream, cancel } = useSSE()
   const [isStreaming, setIsStreaming] = useState(false)
@@ -26,6 +25,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
   const hasTextStartedRef = useRef(false)
   const [conversationId, setConversationId] = useState<string | null>(conversation?.id ?? null)
   const [lastMeta, setLastMeta] = useState<ChatMeta | null>(null)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamBuffer, thinkingBuffer])
 
-  const handleSend = async (text: string, formData?: Record<string, string>) => {
+  const handleSend = async (text: string, formData?: Record<string, string>, docIds?: string[]) => {
     let message = text
     if (formData && Object.keys(formData).length > 0) {
       const fields = Object.entries(formData)
@@ -78,7 +78,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         message,
         team_id: team.id,
         conversation_id: conversationId,
-        document_ids: selectedDocIds,
+        document_ids: docIds ?? [],
         mode: activeMode?.name ?? null,
       },
       {
@@ -92,6 +92,17 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
               created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               message_count: 1,
             })
+            // Upload queued files now that conversation exists
+            if (pendingFiles.length > 0) {
+              for (const file of pendingFiles) {
+                const form = new FormData()
+                form.append('file', file)
+                api.post(`/documents/${team.id}/upload?conversation_id=${meta.conversation_id}`, form, {
+                  headers: { 'Content-Type': 'multipart/form-data' },
+                })
+              }
+              setPendingFiles([])
+            }
           }
         },
         onThinking: (token) => {
@@ -207,6 +218,9 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         onCancel={cancel}
         isStreaming={isStreaming}
         activeMode={activeMode}
+        teamId={team.id}
+        conversationId={conversationId}
+        onUploadQueued={(files) => setPendingFiles(files)}
       />
     </div>
   )

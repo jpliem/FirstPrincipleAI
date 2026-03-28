@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import type { Team, Conversation, TaskMode } from '../types'
 import ConversationList from './ConversationList'
-import DocumentUpload from './DocumentUpload'
 import ModeSelector from './ModeSelector'
 
 interface Props {
@@ -14,13 +13,12 @@ interface Props {
   onSelectConversation: (conv: Conversation) => void
   onNewConversation: () => void
   onModeChange: (mode: TaskMode | null) => void
-  onDocumentsChange: (docIds: string[]) => void
 }
 
 export default function ChatSidebar({
   teams, activeTeam, onSelectTeam,
   activeConversation, onSelectConversation, onNewConversation,
-  onModeChange, onDocumentsChange,
+  onModeChange,
 }: Props) {
   const { user, logout } = useAuth()
 
@@ -57,13 +55,6 @@ export default function ChatSidebar({
       {activeTeam && (
         <div className="px-3 py-2 border-b border-gray-800">
           <ModeSelector teamId={activeTeam.id} onModeChange={onModeChange} />
-        </div>
-      )}
-
-      {/* Document upload */}
-      {activeTeam && (
-        <div className="px-3 py-2 border-b border-gray-800">
-          <DocumentUpload teamId={activeTeam.id} onDocumentsChange={onDocumentsChange} />
         </div>
       )}
 

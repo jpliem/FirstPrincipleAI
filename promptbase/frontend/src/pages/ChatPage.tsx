@@ -9,7 +9,6 @@ export default function ChatPage() {
   const [activeTeam, setActiveTeam] = useState<Team | null>(null)
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
   const [activeMode, setActiveMode] = useState<TaskMode | null>(null)
-  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([])
 
   const { data: teams = [] } = useQuery<Team[]>({
     queryKey: ['teams'],
@@ -30,7 +29,6 @@ export default function ChatPage() {
           setActiveTeam(team)
           setActiveConversation(null)
           setActiveMode(null)
-          setSelectedDocIds([])
         }}
         activeConversation={activeConversation}
         onSelectConversation={setActiveConversation}
@@ -39,7 +37,6 @@ export default function ChatPage() {
           setActiveMode(null)
         }}
         onModeChange={setActiveMode}
-        onDocumentsChange={setSelectedDocIds}
       />
       <main className="flex-1 flex flex-col min-w-0">
         {activeTeam ? (
@@ -48,7 +45,6 @@ export default function ChatPage() {
             conversation={activeConversation}
             onConversationCreated={setActiveConversation}
             activeMode={activeMode}
-            selectedDocIds={selectedDocIds}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">
