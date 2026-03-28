@@ -17,16 +17,18 @@ def test_budget_fits():
 
 
 def test_budget_overflow_trims_lowest_priority():
-    budget = TokenBudget(model_context_limit=1000)
-    budget.reserve_for_response(200)
-    budget.reserve_for_history(200)
-    budget.add_section("core", "word " * 400, priority=100)
-    budget.add_section("domain_a", "word " * 300, priority=50)
-    budget.add_section("domain_b", "word " * 100, priority=80)
+    budget = TokenBudget(model_context_limit=4000)
+    budget.reserve_for_response(500)
+    budget.reserve_for_history(500)
+    # Budget = 3000 tokens. core ~500, domain_b ~125 fit. domain_a ~3750 gets trimmed.
+    budget.add_section("core", "word " * 400, priority=100)  # ~500 tokens
+    budget.add_section("domain_a", "word " * 3000, priority=50)  # ~3750 tokens, too big
+    budget.add_section("domain_b", "word " * 100, priority=80)  # ~125 tokens
 
     result = budget.compile()
     assert "core" in result["included"]
     assert "domain_b" in result["included"]
+    assert "domain_a" in result["trimmed"]
 
 
 def test_budget_use_condensed_core():

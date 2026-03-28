@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import mistune
+from mistune.plugins.table import table as table_plugin
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
@@ -18,8 +19,10 @@ def render_markdown_to_docx(
     else:
         doc = Document()
 
-    md = mistune.create_markdown(renderer=mistune.AstRenderer())
-    tokens = md(markdown_text)
+    # mistune v3: use Markdown.parse() to get AST tokens
+    md = mistune.Markdown()
+    table_plugin(md)
+    tokens, _state = md.parse(markdown_text)
 
     if metadata:
         meta_para = doc.add_paragraph()
@@ -127,12 +130,22 @@ def _render_table(doc: Document, token: dict):
 
     rows = []
     for child in children:
-        if child.get("type") in ("table_head", "table_body"):
+        child_type = child.get("type", "")
+        if child_type == "table_head":
+            # In mistune v3, table_head contains table_cell directly (no table_row wrapper)
+            cells = []
+            for cell in child.get("children", []):
+                if cell.get("type") == "table_cell":
+                    cells.append(_extract_text(cell.get("children", [])))
+            if cells:
+                rows.append(cells)
+        elif child_type == "table_body":
             for row in child.get("children", []):
                 if row.get("type") == "table_row":
                     cells = []
                     for cell in row.get("children", []):
-                        cells.append(_extract_text(cell.get("children", [])))
+                        if cell.get("type") == "table_cell":
+                            cells.append(_extract_text(cell.get("children", [])))
                     rows.append(cells)
 
     if not rows:
