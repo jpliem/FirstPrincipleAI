@@ -307,6 +307,98 @@ async def create_or_update_provider(
     return {"id": str(provider.id), "name": provider.name}
 
 
+@router.put("/providers/{provider_id}")
+async def update_provider(
+    provider_id: uuid.UUID, body: LLMProviderConfigCreate,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    result = await db.execute(select(LLMProviderConfig).where(LLMProviderConfig.id == provider_id))
+    provider = result.scalar_one_or_none()
+    if not provider:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    provider.name = body.name
+    provider.base_url = body.base_url
+    if body.api_key:
+        provider.api_key_encrypted = body.api_key
+    provider.is_enabled = body.is_enabled
+    await db.commit()
+    await db.refresh(provider)
+    return LLMProviderConfigResponse(
+        id=provider.id, name=provider.name, base_url=provider.base_url,
+        has_api_key=bool(provider.api_key_encrypted), is_enabled=provider.is_enabled,
+    )
+
+
+@router.get("/providers/{provider_name}/models")
+async def list_provider_models(
+    provider_name: str,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Fetch available models from the provider's API."""
+    import httpx
+
+    result = await db.execute(select(LLMProviderConfig).where(LLMProviderConfig.name == provider_name))
+    provider = result.scalar_one_or_none()
+
+    api_key = provider.api_key_encrypted if provider else ""
+    base_url = provider.base_url if provider else ""
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            if provider_name == "ollama":
+                url = (base_url or "http://host.docker.internal:11434") + "/api/tags"
+                res = await client.get(url)
+                res.raise_for_status()
+                data = res.json()
+                models = [m["name"] for m in data.get("models", [])]
+                return {"provider": provider_name, "models": models}
+
+            elif provider_name == "openrouter":
+                res = await client.get(
+                    "https://openrouter.ai/api/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
+                )
+                res.raise_for_status()
+                data = res.json()
+                models = [m["id"] for m in data.get("data", [])]
+                return {"provider": provider_name, "models": models[:100]}  # limit to 100
+
+            elif provider_name == "openai":
+                if not api_key:
+                    return {"provider": provider_name, "models": [], "error": "No API key configured"}
+                res = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                res.raise_for_status()
+                data = res.json()
+                # Filter to chat models only
+                chat_models = [
+                    m["id"] for m in data.get("data", [])
+                    if any(k in m["id"] for k in ["gpt-4", "gpt-3.5", "o1", "o3"])
+                ]
+                return {"provider": provider_name, "models": sorted(chat_models)}
+
+            elif provider_name == "anthropic":
+                # Anthropic doesn't have a models list API — return known models
+                return {"provider": provider_name, "models": [
+                    "claude-opus-4-20250514",
+                    "claude-sonnet-4-20250514",
+                    "claude-haiku-4-20250414",
+                ]}
+
+            else:
+                return {"provider": provider_name, "models": [], "error": f"Unknown provider: {provider_name}"}
+
+    except httpx.HTTPError as e:
+        return {"provider": provider_name, "models": [], "error": str(e)}
+    except Exception as e:
+        return {"provider": provider_name, "models": [], "error": str(e)}
+
+
 @router.delete("/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_provider(
     provider_id: uuid.UUID,

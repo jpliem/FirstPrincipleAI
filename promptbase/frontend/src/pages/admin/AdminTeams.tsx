@@ -19,13 +19,6 @@ interface TeamLLMConfig {
   temperature: number
 }
 
-const MODEL_OPTIONS: Record<string, string[]> = {
-  anthropic: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-haiku-4-20250414'],
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
-  openrouter: ['anthropic/claude-sonnet-4-20250514', 'openai/gpt-4o', 'google/gemini-2.5-pro', 'meta-llama/llama-3-70b-instruct'],
-  ollama: ['llama3', 'llama3:70b', 'mixtral', 'codellama', 'deepseek-coder'],
-}
-
 export default function AdminTeams() {
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
@@ -37,6 +30,9 @@ export default function AdminTeams() {
     embedding_model: 'text-embedding-3-small', max_tokens_per_request: 4096, temperature: 0.7,
   })
   const [llmSaved, setLlmSaved] = useState<string | null>(null)
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [modelError, setModelError] = useState<string | null>(null)
 
   const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
     queryKey: ['admin', 'teams'],
@@ -79,15 +75,36 @@ export default function AdminTeams() {
     },
   })
 
+  const fetchModels = async (providerName: string) => {
+    setLoadingModels(true)
+    setModelError(null)
+    setAvailableModels([])
+    try {
+      const res = await api.get(`/admin/providers/${providerName}/models`)
+      if (res.data.error) {
+        setModelError(res.data.error)
+        setAvailableModels([])
+      } else {
+        setAvailableModels(res.data.models ?? [])
+      }
+    } catch (err: any) {
+      setModelError(err.message)
+    } finally {
+      setLoadingModels(false)
+    }
+  }
+
   const startEditLLM = async (teamId: string) => {
+    let provName = providers[0]?.name ?? 'ollama'
     try {
       const res = await api.get(`/admin/teams/${teamId}/llm-config`)
       if (res.data) {
         setLlmForm(res.data)
+        provName = res.data.provider_name
       } else {
         setLlmForm({
-          provider_name: providers[0]?.name ?? 'anthropic',
-          chat_model: 'claude-sonnet-4-20250514',
+          provider_name: provName,
+          chat_model: '',
           embedding_model: 'text-embedding-3-small',
           max_tokens_per_request: 4096,
           temperature: 0.7,
@@ -95,14 +112,15 @@ export default function AdminTeams() {
       }
     } catch {
       setLlmForm({
-        provider_name: providers[0]?.name ?? 'anthropic',
-        chat_model: 'claude-sonnet-4-20250514',
+        provider_name: provName,
+        chat_model: '',
         embedding_model: 'text-embedding-3-small',
         max_tokens_per_request: 4096,
         temperature: 0.7,
       })
     }
     setEditingLLM(teamId)
+    fetchModels(provName)
   }
 
   const generateInvite = async (teamId: string) => {
@@ -200,8 +218,8 @@ export default function AdminTeams() {
                         value={llmForm.provider_name}
                         onChange={(e) => {
                           const name = e.target.value
-                          const firstModel = (MODEL_OPTIONS[name] ?? [])[0] ?? ''
-                          setLlmForm({ ...llmForm, provider_name: name, chat_model: firstModel })
+                          setLlmForm({ ...llmForm, provider_name: name, chat_model: '' })
+                          fetchModels(name)
                         }}
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white"
                       >
@@ -213,21 +231,29 @@ export default function AdminTeams() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Chat Model</label>
-                      <select
-                        value={llmForm.chat_model}
-                        onChange={(e) => setLlmForm({ ...llmForm, chat_model: e.target.value })}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white"
-                      >
-                        {models.map((m) => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                      <input
-                        type="text"
-                        value={llmForm.chat_model}
-                        onChange={(e) => setLlmForm({ ...llmForm, chat_model: e.target.value })}
-                        placeholder="Or type a custom model name"
-                        className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-300 placeholder-gray-600"
-                      />
+                      <label className="block text-xs text-gray-400 mb-1">
+                        Chat Model
+                        {loadingModels && <Loader2 size={10} className="inline ml-1 animate-spin" />}
+                      </label>
+                      {availableModels.length > 0 ? (
+                        <select
+                          value={llmForm.chat_model}
+                          onChange={(e) => setLlmForm({ ...llmForm, chat_model: e.target.value })}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white"
+                        >
+                          <option value="">Select a model...</option>
+                          {availableModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={llmForm.chat_model}
+                          onChange={(e) => setLlmForm({ ...llmForm, chat_model: e.target.value })}
+                          placeholder={loadingModels ? 'Loading models...' : 'Type model name'}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-600"
+                        />
+                      )}
+                      {modelError && <p className="text-xs text-red-400 mt-1">{modelError}</p>}
                     </div>
                   </div>
 
