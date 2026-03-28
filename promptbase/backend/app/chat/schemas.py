@@ -16,6 +16,7 @@ class MessageResponse(BaseModel):
     id: uuid.UUID
     role: str
     content: str
+    thinking_content: str | None = None
     token_count: int
     created_at: datetime
 
