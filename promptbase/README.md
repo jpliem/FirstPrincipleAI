@@ -280,6 +280,70 @@ ZIP your prompt pack folder with `manifest.json` + markdown files, then upload v
 | Export | python-docx, mistune, LibreOffice (optional PDF) |
 | Deployment | Docker Compose |
 
+## How It Compares
+
+PromptBase is not a ChatGPT replacement. It's a **prompt management and delivery platform** — the value is in the compiler engine, not the chat UI.
+
+```
+ChatGPT / Claude    = Consumer AI chat product
+Open WebUI          = Self-hosted AI chat product
+PromptBase          = Organizational AI operating system
+```
+
+The chat UI is the delivery surface. The real product is: *"How do you make AI consistently follow your organization's multi-file instruction framework across multiple teams, multiple models, with automatic context-aware routing?"*
+
+### vs ChatGPT / Claude Projects
+
+| Feature | ChatGPT/Claude | PromptBase |
+|---------|---------------|------------|
+| System instructions | One text box per project | **25-module layered compiler with auto-routing** |
+| Multi-model | Locked to their model | **Ollama, OpenAI, Anthropic, OpenRouter** |
+| Multi-team | No concept of teams | **Each team gets own pack + model + docs** |
+| Export to Word | Copy-paste manually | **Structured DOCX with tables + PDF** |
+| Task modes | Manual prompt switching | **Auto-detects from message** |
+| Domain routing | Nothing | **Keyword-matched domain modules** |
+| Token budgeting | Hidden, automatic | **Dynamic, visible, priority-based trimming** |
+| Code execution | Yes | No |
+| Image generation | Yes | No |
+| Web browsing | Yes | No |
+| Tool use | Yes | No |
+| Voice / mobile | Yes | No |
+| Maturity | Production-grade | MVP |
+
+### vs Open WebUI
+
+| Feature | Open WebUI | PromptBase |
+|---------|-----------|------------|
+| Chat UI | Excellent, polished | Functional, basic |
+| Ollama integration | Native, first-class | Works via API |
+| RAG / document chat | Built-in (ChromaDB) | Built-in (pgvector) |
+| System prompts | One prompt per model | **Multi-module compiler with layers** |
+| Prompt pack management | No concept | **Full editor, import/export ZIP, AI analyzer** |
+| Multi-team isolation | No (single-user focus) | **Teams with separate packs, models, docs** |
+| Auto mode detection | No | **Keyword-based, per-message** |
+| Domain module routing | No | **Conditional loading by topic** |
+| Token budget management | Basic | **Dynamic with priority trimming** |
+| Word/PDF export | No | **Structured DOCX with tables** |
+| Plugin system | Yes (pipelines) | No |
+| Image/voice | Yes | No |
+| Community | Large, active | Internal tool |
+| Maturity | Years of development | MVP |
+
+### What PromptBase Does That Nobody Else Does
+
+The Prompt Compiler is the unique differentiator:
+
+```
+25 markdown instruction files
+  -> auto-classified by user intent
+  -> layered (core always loaded, domain conditionally loaded)
+  -> mode auto-detected (analysis vs implementation vs tender)
+  -> token-budgeted per model context window
+  -> compiled into one coherent system prompt per request
+```
+
+No other platform supports multi-module prompt packs with conditional loading, automatic mode detection that changes AI behavior per message, domain routing that loads specialized knowledge only when relevant, or token budget management that adapts to different model sizes.
+
 ## Tests
 
 ```bash
