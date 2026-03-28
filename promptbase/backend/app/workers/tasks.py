@@ -7,14 +7,24 @@ from app.documents.models import Document, DocumentChunk
 from app.documents.parser import parse_document
 from app.workers.celery_app import celery
 
+# Import all models so SQLAlchemy can resolve FKs
+from app.auth.models import User, Team, TeamMember, InviteLink  # noqa: F401
+from app.compiler.models import PromptPack, PromptModule, TaskMode  # noqa: F401
+from app.chat.models import Conversation, Message, ConversationDocument  # noqa: F401
+from app.providers.models import LLMProviderConfig, TeamLLMConfig  # noqa: F401
+
+_engine = None
+
 
 def _get_sync_session():
+    global _engine
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
-    sync_url = settings.database_url.replace("postgresql+asyncpg", "postgresql")
-    engine = create_engine(sync_url)
-    return Session(engine)
+    if _engine is None:
+        sync_url = settings.database_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
+        _engine = create_engine(sync_url)
+    return Session(_engine)
 
 
 @celery.task(name="process_document", bind=True, max_retries=3)
@@ -59,11 +69,14 @@ def process_document(self, document_id: str):
 
     except Exception as e:
         session.rollback()
-        doc = session.query(Document).filter(Document.id == uuid.UUID(document_id)).first()
-        if doc:
-            doc.status = "failed"
-            doc.error_message = str(e)[:1000]
-            session.commit()
+        try:
+            doc = session.query(Document).filter(Document.id == uuid.UUID(document_id)).first()
+            if doc:
+                doc.status = "failed"
+                doc.error_message = str(e)[:1000]
+                session.commit()
+        except Exception:
+            session.rollback()
         raise self.retry(exc=e, countdown=60)
     finally:
         session.close()
