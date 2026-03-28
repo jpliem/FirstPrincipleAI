@@ -52,13 +52,12 @@ def _render_token(doc: Document, token: dict):
 
     elif token_type == "list":
         ordered = token.get("attrs", {}).get("ordered", False)
-        for item in token.get("children", []):
-            if item.get("type") == "list_item":
-                para = doc.add_paragraph(style="List Number" if ordered else "List Bullet")
-                children = item.get("children", [])
-                for child in children:
-                    if child.get("type") == "paragraph":
-                        _render_inline(para, child.get("children", []))
+        _render_list(doc, token, ordered)
+
+    elif token_type == "block_text":
+        # block_text wraps content inside some list items
+        for child in token.get("children", []):
+            _render_token(doc, child)
 
     elif token_type == "table":
         _render_table(doc, token)
@@ -78,6 +77,54 @@ def _render_token(doc: Document, token: dict):
 
     elif token_type == "thematic_break":
         doc.add_paragraph("─" * 50)
+
+
+def _render_list(doc: Document, token: dict, ordered: bool, level: int = 0):
+    """Render a list, handling nested lists and various child node types."""
+    for item in token.get("children", []):
+        if item.get("type") != "list_item":
+            continue
+
+        para = doc.add_paragraph(style="List Number" if ordered else "List Bullet")
+        # Indent nested lists
+        if level > 0:
+            para.paragraph_format.left_indent = Pt(18 * level)
+
+        children = item.get("children", [])
+        for child in children:
+            child_type = child.get("type", "")
+
+            if child_type == "paragraph":
+                _render_inline(para, child.get("children", []))
+
+            elif child_type == "block_text":
+                # block_text wraps inline content in some list contexts
+                for block_child in child.get("children", []):
+                    if block_child.get("type") == "paragraph":
+                        _render_inline(para, block_child.get("children", []))
+                    elif block_child.get("type") == "list":
+                        nested_ordered = block_child.get("attrs", {}).get("ordered", False)
+                        _render_list(doc, block_child, nested_ordered, level + 1)
+                    else:
+                        # Fallback: extract any text
+                        text = _extract_text(block_child.get("children", []))
+                        if not text:
+                            text = block_child.get("raw", block_child.get("text", ""))
+                        if text:
+                            para.add_run(text)
+
+            elif child_type == "list":
+                # Nested list inside a list item
+                nested_ordered = child.get("attrs", {}).get("ordered", False)
+                _render_list(doc, child, nested_ordered, level + 1)
+
+            else:
+                # Fallback: try to extract text from unknown child types
+                text = _extract_text(child.get("children", []))
+                if not text:
+                    text = child.get("raw", child.get("text", ""))
+                if text:
+                    para.add_run(text)
 
 
 def _render_inline(para, children: list):
