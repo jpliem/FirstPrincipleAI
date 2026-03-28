@@ -3,15 +3,22 @@ import { getAccessToken } from '../api/client'
 
 export interface ChatMeta {
   conversation_id: string
+  provider: string
+  model: string
   mode_detected: string | null
-  modules_loaded: number
+  modules_loaded: string[]
+  modules_by_layer: Record<string, string[]>
+  core_mode: string | null
   domains_matched: string[]
   prompt_tokens: number
   context_limit: number
+  budget_remaining: number
+  trimmed: string[]
 }
 
 interface SSEOptions {
   onToken: (token: string) => void
+  onThinking: (token: string) => void
   onMeta: (meta: ChatMeta) => void
   onDone: () => void
   onError: (err: string) => void
@@ -83,8 +90,15 @@ export function useSSE() {
               } catch {}
             }
 
-            // Token
-            opts.onToken(data.replace(/\\n/g, '\n'))
+            // Typed events: "thinking:content" or "text:content"
+            if (data.startsWith('thinking:')) {
+              opts.onThinking(data.slice(9).replace(/\\n/g, '\n'))
+            } else if (data.startsWith('text:')) {
+              opts.onToken(data.slice(5).replace(/\\n/g, '\n'))
+            } else {
+              // Backwards compatibility: unprefixed = text
+              opts.onToken(data.replace(/\\n/g, '\n'))
+            }
           }
         }
         opts.onDone()
