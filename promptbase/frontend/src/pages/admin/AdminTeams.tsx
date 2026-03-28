@@ -129,7 +129,6 @@ export default function AdminTeams() {
   }
 
   const inviteUrl = inviteToken ? `${window.location.origin}/invite/${inviteToken.token}` : null
-  const models = MODEL_OPTIONS[llmForm.provider_name] ?? []
 
   return (
     <div className="p-8 max-w-3xl">
