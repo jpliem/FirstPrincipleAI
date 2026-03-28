@@ -7,6 +7,13 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.config import settings
 from app.database import Base
 
+# Import all models so autogenerate detects them
+from app.auth.models import User, Team, TeamMember, InviteLink  # noqa: F401
+from app.compiler.models import PromptPack, PromptModule, TaskMode  # noqa: F401
+from app.documents.models import Document, DocumentChunk  # noqa: F401
+from app.chat.models import Conversation, Message, ConversationDocument  # noqa: F401
+from app.providers.models import LLMProviderConfig, TeamLLMConfig  # noqa: F401
+
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
