@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, Upload, Download, Sliders, Loader2 } from 'lucide-react'
+import { Plus, Upload, Download, Sliders, Loader2, Sparkles, Check } from 'lucide-react'
 import { api, getAccessToken } from '../../api/client'
 import type { PromptPack } from '../../types'
 
@@ -164,10 +164,114 @@ export default function AdminPacks() {
                   </button>
                 </div>
               </div>
-              {/* Module editor inline */}
+              {/* AI Analyzer + Module editor */}
+              <PackAnalyzer packId={pack.id} />
               <PackModules packId={pack.id} />
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PackAnalyzer({ packId }: { packId: string }) {
+  const qc = useQueryClient()
+  const [analyzing, setAnalyzing] = useState(false)
+  const [results, setResults] = useState<any[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [applied, setApplied] = useState(false)
+
+  const analyze = async () => {
+    setAnalyzing(true)
+    setError(null)
+    setResults(null)
+    setApplied(false)
+    try {
+      const res = await api.post(`/admin/packs/${packId}/analyze`)
+      if (res.data.error) {
+        setError(res.data.error)
+        return
+      }
+      setResults(res.data.analysis)
+    } catch (err: any) {
+      setError(err.response?.data?.detail ?? err.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const applyAll = async () => {
+    if (!results) return
+    try {
+      await api.post(`/admin/packs/${packId}/apply-analysis`, results)
+      qc.invalidateQueries({ queryKey: ['admin', 'modules', packId] })
+      setApplied(true)
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  const LAYER_COLOR: Record<string, string> = {
+    core: 'text-blue-400',
+    always: 'text-purple-400',
+    domain: 'text-green-400',
+  }
+
+  return (
+    <div className="mt-3 border-t border-gray-800 pt-3">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={analyze}
+          disabled={analyzing}
+          className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50"
+        >
+          {analyzing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+          {analyzing ? 'Analyzing with AI...' : 'AI Analyze Modules'}
+        </button>
+        {applied && <span className="text-xs text-green-400 flex items-center gap-1"><Check size={12} /> Applied</span>}
+      </div>
+
+      {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+
+      {results && !applied && (
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-400">AI suggestions for {results.length} modules:</p>
+            <button
+              onClick={applyAll}
+              className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded-lg"
+            >
+              Apply All Suggestions
+            </button>
+          </div>
+          <div className="max-h-64 overflow-y-auto space-y-1">
+            {results.map((r: any) => {
+              const changed = r.suggested_layer !== r.current_layer ||
+                JSON.stringify(r.suggested_tags) !== JSON.stringify(r.current_tags) ||
+                r.suggested_priority !== r.current_priority
+              return (
+                <div key={r.module_id} className={`text-xs px-3 py-2 rounded-lg ${changed ? 'bg-amber-900/20 border border-amber-800/30' : 'bg-gray-800/50'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-300 font-medium truncate flex-1">{r.filename}</span>
+                    {changed && (
+                      <span className="text-amber-400 shrink-0">changed</span>
+                    )}
+                  </div>
+                  {r.suggested_description && (
+                    <p className="text-gray-500 mt-0.5">{r.suggested_description}</p>
+                  )}
+                  {changed && (
+                    <div className="mt-1 flex gap-3 text-gray-500">
+                      <span>layer: <span className={LAYER_COLOR[r.current_layer] ?? ''}>{r.current_layer}</span> → <span className={LAYER_COLOR[r.suggested_layer] ?? ''}>{r.suggested_layer}</span></span>
+                      <span>priority: {r.current_priority} → {r.suggested_priority}</span>
+                      {r.suggested_tags?.length > 0 && <span>tags: {r.suggested_tags.join(', ')}</span>}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>

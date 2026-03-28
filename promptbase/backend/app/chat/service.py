@@ -113,10 +113,16 @@ async def stream_chat_response(
 
     pack_data = await load_pack_for_team(db, conversation.team_id)
 
-    # Get the provider's actual context window, not the response max_tokens
+    # Get the provider's actual context window dynamically
     provider = get_provider(provider_name)
     if provider:
-        context_limit = provider.max_context_tokens(llm_config.model)
+        # For Ollama, fetch actual context size from the server
+        if hasattr(provider, "fetch_context_size"):
+            context_limit = await provider.fetch_context_size(
+                llm_config.model, llm_config.base_url or "http://localhost:11434"
+            )
+        else:
+            context_limit = provider.max_context_tokens(llm_config.model)
     else:
         context_limit = 128000
 
@@ -151,6 +157,12 @@ async def stream_chat_response(
         len(compiled["modules_loaded"]), compiled["total_tokens"],
         compiled.get("core_mode"), compiled.get("mode"), compiled.get("trimmed"),
     )
+
+    # Dynamic max_tokens — use remaining budget for the response
+    history_tokens = sum(count_tokens_approx(m["content"]) for m in history)
+    used_tokens = compiled["total_tokens"] + history_tokens + count_tokens_approx(user_message)
+    dynamic_max = max(1024, context_limit - used_tokens - 256)  # 256 buffer
+    llm_config.max_tokens = min(llm_config.max_tokens, dynamic_max)
 
     messages = history + [{"role": "user", "content": user_message}]
     full_response = ""

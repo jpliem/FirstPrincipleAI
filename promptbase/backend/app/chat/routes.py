@@ -124,7 +124,14 @@ async def debug_compile(
     pack_data = await load_pack_for_team(db, body.team_id)
 
     provider = get_provider(provider_name)
-    context_limit = provider.max_context_tokens(llm_config.model) if provider else 128000
+    if provider and hasattr(provider, "fetch_context_size"):
+        context_limit = await provider.fetch_context_size(
+            llm_config.model, llm_config.base_url or "http://localhost:11434"
+        )
+    elif provider:
+        context_limit = provider.max_context_tokens(llm_config.model)
+    else:
+        context_limit = 128000
 
     if pack_data:
         compiler = PromptCompiler(

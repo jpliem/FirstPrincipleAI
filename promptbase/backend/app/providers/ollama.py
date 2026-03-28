@@ -5,11 +5,6 @@ import httpx
 
 from app.providers.base import LLMConfig, LLMProvider
 
-MODEL_CONTEXT = {
-    "llama3": 8192, "llama3:70b": 8192,
-    "mixtral": 32768, "codellama": 16384, "deepseek-coder": 16384,
-}
-
 # Cache for dynamically fetched context sizes
 _context_cache: dict[str, int] = {}
 
@@ -41,7 +36,6 @@ class OllamaProvider(LLMProvider):
                         yield f"[Ollama error {response.status_code}: {body.decode()[:300]}]"
                         return
 
-                    thinking_done = False
                     async for line in response.aiter_lines():
                         if not line.strip():
                             continue
@@ -52,17 +46,8 @@ class OllamaProvider(LLMProvider):
                                 return
                             msg = chunk.get("message", {})
                             content = msg.get("content", "")
-                            thinking = msg.get("thinking", "")
-
-                            # Some models (qwen, deepseek) use a "thinking" field
-                            # before producing content. Show content when available,
-                            # skip thinking tokens (internal reasoning).
                             if content:
-                                if thinking and not thinking_done:
-                                    thinking_done = True
                                 yield content
-                            # If model ONLY uses thinking (no content at all),
-                            # we'd need to yield thinking. But wait for content first.
                         except json.JSONDecodeError:
                             continue
             except httpx.ConnectError as e:
@@ -90,9 +75,24 @@ class OllamaProvider(LLMProvider):
         return len(text) // 4
 
     def max_context_tokens(self, model: str) -> int:
-        if model in MODEL_CONTEXT:
-            return MODEL_CONTEXT[model]
         if model in _context_cache:
             return _context_cache[model]
-        # Default to 32768 for unknown models — most modern models support at least this
+        return 32768  # safe default, will be overridden by fetch_context_size
+
+    async def fetch_context_size(self, model: str, base_url: str) -> int:
+        """Query Ollama /api/show to get the model's actual context length."""
+        base_url = base_url.rstrip("/")
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                res = await client.post(f"{base_url}/api/show", json={"name": model})
+                if res.status_code == 200:
+                    data = res.json()
+                    model_info = data.get("model_info", {})
+                    for key, value in model_info.items():
+                        if "context_length" in key:
+                            ctx = int(value)
+                            _context_cache[model] = ctx
+                            return ctx
+        except Exception:
+            pass
         return 32768

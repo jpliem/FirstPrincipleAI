@@ -217,6 +217,170 @@ async def assign_pack_to_team(
     return {"team_id": str(team_id), "pack_id": str(pack_id)}
 
 
+# --- AI Pack Analyzer ---
+
+@router.post("/packs/{pack_id}/analyze")
+async def analyze_pack(
+    pack_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Use AI to analyze each module and suggest layer, tags, priority, and description."""
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    from app.providers.models import LLMProviderConfig, TeamLLMConfig
+    from app.providers.base import LLMConfig
+    from app.providers.registry import get_provider
+
+    # Find any configured provider to use for analysis
+    providers_result = await db.execute(
+        select(LLMProviderConfig).where(LLMProviderConfig.is_enabled == True)
+    )
+    providers_list = providers_result.scalars().all()
+    if not providers_list:
+        raise HTTPException(status_code=400, detail="No LLM provider configured. Add one in LLM Providers first.")
+
+    # Use the first available provider
+    prov = providers_list[0]
+    provider = get_provider(prov.name)
+    if not provider:
+        raise HTTPException(status_code=400, detail=f"Provider '{prov.name}' not available")
+
+    # Pick a model — for Ollama try to get one from tags, otherwise use a default
+    if prov.name == "ollama":
+        import httpx
+        base_url = (prov.base_url or "http://localhost:11434").rstrip("/")
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+                r = await client.get(f"{base_url}/api/tags")
+                models = [m["name"] for m in r.json().get("models", [])]
+                model = models[0] if models else "llama3"
+        except Exception:
+            model = "llama3"
+    elif prov.name == "anthropic":
+        model = "claude-sonnet-4-20250514"
+    elif prov.name == "openai":
+        model = "gpt-4o"
+    else:
+        model = "anthropic/claude-sonnet-4-20250514"
+
+    llm_config = LLMConfig(
+        model=model,
+        api_key=prov.api_key_encrypted or "",
+        base_url=prov.base_url or "",
+        temperature=0.3,
+        max_tokens=4096,
+    )
+
+    # Load pack modules
+    modules_result = await db.execute(
+        select(PromptModule).where(PromptModule.pack_id == pack_id).order_by(PromptModule.sort_order)
+    )
+    modules = modules_result.scalars().all()
+
+    if not modules:
+        raise HTTPException(status_code=404, detail="Pack has no modules")
+
+    # Build analysis prompt
+    modules_summary = []
+    for m in modules:
+        preview = m.content[:300].replace("\n", " ")
+        modules_summary.append(f"- **{m.filename}** (current layer: {m.layer}, tags: {m.tags}): {preview}...")
+
+    analysis_prompt = f"""Analyze this prompt pack with {len(modules)} modules. For each module, determine:
+
+1. **layer**: Should it be "core" (always loaded for every request), "always" (always appended after core), or "domain" (only loaded when the topic matches)?
+2. **tags**: If domain, what keywords should trigger loading this module? List 5-10 relevant keywords.
+3. **priority**: 1-100 (100 = most important, loaded first when budget is tight)
+4. **description**: One sentence describing what this module does.
+
+Modules:
+{chr(10).join(modules_summary)}
+
+Respond in JSON format ONLY — no other text:
+```json
+[
+  {{"filename": "...", "layer": "core|domain|always", "tags": ["keyword1", "keyword2"], "priority": 85, "description": "..."}}
+]
+```"""
+
+    # Call LLM
+    full_response = ""
+    async for token in provider.stream_chat(
+        "You are a prompt engineering analyst. Respond only with the requested JSON.",
+        [{"role": "user", "content": analysis_prompt}],
+        llm_config,
+    ):
+        full_response += token
+
+    # Parse JSON from response
+    try:
+        # Extract JSON from possible markdown code blocks
+        json_str = full_response
+        if "```json" in json_str:
+            json_str = json_str.split("```json")[1].split("```")[0]
+        elif "```" in json_str:
+            json_str = json_str.split("```")[1].split("```")[0]
+
+        analysis = json.loads(json_str.strip())
+    except (json.JSONDecodeError, IndexError):
+        return {"error": "Failed to parse AI response", "raw_response": full_response[:2000]}
+
+    # Build lookup by filename
+    analysis_map = {item["filename"]: item for item in analysis if isinstance(item, dict)}
+
+    results = []
+    for m in modules:
+        suggestion = analysis_map.get(m.filename, {})
+        results.append({
+            "module_id": str(m.id),
+            "filename": m.filename,
+            "current_layer": m.layer,
+            "current_tags": m.tags,
+            "current_priority": m.priority,
+            "suggested_layer": suggestion.get("layer", m.layer),
+            "suggested_tags": suggestion.get("tags", m.tags),
+            "suggested_priority": suggestion.get("priority", m.priority),
+            "suggested_description": suggestion.get("description", ""),
+        })
+
+    return {"pack_id": str(pack_id), "model_used": model, "analysis": results}
+
+
+@router.post("/packs/{pack_id}/apply-analysis")
+async def apply_analysis(
+    pack_id: uuid.UUID,
+    analysis: list[dict],
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply AI analysis results to update module layers, tags, and priorities."""
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    updated = 0
+    for item in analysis:
+        module_id = item.get("module_id")
+        if not module_id:
+            continue
+        result = await db.execute(select(PromptModule).where(PromptModule.id == uuid.UUID(module_id)))
+        module = result.scalar_one_or_none()
+        if not module or str(module.pack_id) != str(pack_id):
+            continue
+
+        if "suggested_layer" in item:
+            module.layer = item["suggested_layer"]
+        if "suggested_tags" in item:
+            module.tags = item["suggested_tags"]
+        if "suggested_priority" in item:
+            module.priority = item["suggested_priority"]
+        updated += 1
+
+    await db.commit()
+    return {"updated": updated}
+
+
 # --- LLM Provider Config ---
 
 from app.providers.models import LLMProviderConfig, TeamLLMConfig
