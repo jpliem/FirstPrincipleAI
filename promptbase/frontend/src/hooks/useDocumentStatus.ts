@@ -9,9 +9,9 @@ export function useDocuments(teamId: string) {
       const res = await api.get(`/documents/${teamId}`)
       return res.data.documents
     },
-    // Poll every 3s if any doc is pending/processing
-    refetchInterval: (data) => {
-      const hasActive = (data ?? []).some(
+    refetchInterval: (query) => {
+      const docs = query.state.data ?? []
+      const hasActive = docs.some(
         (d) => d.status === 'pending' || d.status === 'processing'
       )
       return hasActive ? 3_000 : false
