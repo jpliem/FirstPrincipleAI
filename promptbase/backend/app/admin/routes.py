@@ -29,14 +29,24 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 @router.get("/packs", response_model=list[PromptPackResponse])
 async def list_packs(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(PromptPack).order_by(PromptPack.created_at.desc()))
-    packs = result.scalars().all()
+    from sqlalchemy import func as sa_func
+    result = await db.execute(
+        select(
+            PromptPack,
+            sa_func.count(PromptModule.id).label("module_count"),
+        )
+        .outerjoin(PromptModule, PromptModule.pack_id == PromptPack.id)
+        .group_by(PromptPack.id)
+        .order_by(PromptPack.created_at.desc())
+    )
+    rows = result.all()
     return [
         PromptPackResponse(
             id=p.id, name=p.name, version=p.version, description=p.description,
             team_id=p.team_id, created_at=p.created_at.isoformat(),
+            module_count=count,
         )
-        for p in packs
+        for p, count in rows
     ]
 
 
@@ -305,27 +315,63 @@ Respond in JSON format ONLY — no other text:
 ]
 ```"""
 
-    # Call LLM
+    # Call LLM — use non-streaming for analysis to get complete response
+    # For thinking models (qwen, deepseek), add /no_think instruction
+    import httpx as _httpx
+
+    base_url = (prov.base_url or "http://localhost:11434").rstrip("/")
     full_response = ""
-    async for token in provider.stream_chat(
-        "You are a prompt engineering analyst. Respond only with the requested JSON.",
-        [{"role": "user", "content": analysis_prompt}],
-        llm_config,
-    ):
-        full_response += token
+
+    if prov.name == "ollama":
+        # Direct Ollama API call (non-streaming) to avoid thinking token issues
+        async with _httpx.AsyncClient(follow_redirects=True, timeout=_httpx.Timeout(10, read=120)) as hc:
+            res = await hc.post(f"{base_url}/api/chat", json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "You are a prompt engineering analyst. Respond ONLY with valid JSON. No explanation, no markdown."},
+                    {"role": "user", "content": "/no_think\n\n" + analysis_prompt},
+                ],
+                "stream": False,
+                "options": {"temperature": 0.3, "num_predict": 4096},
+            })
+            if res.status_code == 200:
+                data = res.json()
+                full_response = data.get("message", {}).get("content", "")
+            else:
+                return {"error": f"Ollama returned {res.status_code}: {res.text[:500]}"}
+    else:
+        async for token in provider.stream_chat(
+            "You are a prompt engineering analyst. Respond only with the requested JSON.",
+            [{"role": "user", "content": analysis_prompt}],
+            llm_config,
+        ):
+            full_response += token
+
+    if not full_response.strip():
+        return {"error": "AI returned empty response", "model": model}
 
     # Parse JSON from response
     try:
-        # Extract JSON from possible markdown code blocks
+        # Extract JSON from possible markdown code blocks or thinking tags
         json_str = full_response
+        # Strip <think>...</think> blocks
+        import re
+        json_str = re.sub(r'<think>.*?</think>', '', json_str, flags=re.DOTALL)
         if "```json" in json_str:
             json_str = json_str.split("```json")[1].split("```")[0]
         elif "```" in json_str:
             json_str = json_str.split("```")[1].split("```")[0]
+        # Try to find JSON array
+        json_str = json_str.strip()
+        if not json_str.startswith("["):
+            # Find first [
+            idx = json_str.find("[")
+            if idx >= 0:
+                json_str = json_str[idx:]
 
         analysis = json.loads(json_str.strip())
-    except (json.JSONDecodeError, IndexError):
-        return {"error": "Failed to parse AI response", "raw_response": full_response[:2000]}
+    except (json.JSONDecodeError, IndexError) as e:
+        return {"error": f"Failed to parse AI response: {e}", "raw_response": full_response[:2000]}
 
     # Build lookup by filename
     analysis_map = {item["filename"]: item for item in analysis if isinstance(item, dict)}
