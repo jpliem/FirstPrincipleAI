@@ -3,14 +3,18 @@ import remarkGfm from 'remark-gfm'
 import { User, Bot } from 'lucide-react'
 import type { Message } from '../types'
 import ExportButton from './ExportButton'
+import ThinkingBlock from './ThinkingBlock'
 
 interface Props {
   message: Message
   isStreaming?: boolean
+  thinkingContent?: string
+  hasTextStarted?: boolean
 }
 
-export default function ChatMessage({ message, isStreaming = false }: Props) {
+export default function ChatMessage({ message, isStreaming = false, thinkingContent, hasTextStarted = true }: Props) {
   const isUser = message.role === 'user'
+  const thinking = thinkingContent || message.thinking_content || ''
 
   return (
     <div className={`flex gap-3 px-4 py-4 ${isUser ? '' : 'bg-gray-900/40'}`}>
@@ -20,6 +24,13 @@ export default function ChatMessage({ message, isStreaming = false }: Props) {
         {isUser ? <User size={14} /> : <Bot size={14} />}
       </div>
       <div className="flex-1 min-w-0 space-y-1">
+        {!isUser && thinking && (
+          <ThinkingBlock
+            content={thinking}
+            isStreaming={isStreaming}
+            hasTextStarted={hasTextStarted}
+          />
+        )}
         <div className="prose prose-invert prose-sm max-w-none">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}

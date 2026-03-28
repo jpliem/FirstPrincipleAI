@@ -6,6 +6,7 @@ import type { Team, Conversation, Message, TaskMode } from '../types'
 import ChatMessage from './ChatMessage'
 import ChatInput from './ChatInput'
 import ExportButton from './ExportButton'
+import ProcessTimeline from './ProcessTimeline'
 
 interface Props {
   team: Team
@@ -20,6 +21,9 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
   const { startStream, cancel } = useSSE()
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamBuffer, setStreamBuffer] = useState('')
+  const [thinkingBuffer, setThinkingBuffer] = useState('')
+  const [hasTextStarted, setHasTextStarted] = useState(false)
+  const hasTextStartedRef = useRef(false)
   const [conversationId, setConversationId] = useState<string | null>(conversation?.id ?? null)
   const [lastMeta, setLastMeta] = useState<ChatMeta | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -39,7 +43,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamBuffer])
+  }, [messages, streamBuffer, thinkingBuffer])
 
   const handleSend = async (text: string, formData?: Record<string, string>) => {
     let message = text
@@ -52,6 +56,9 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
 
     setIsStreaming(true)
     setStreamBuffer('')
+    setThinkingBuffer('')
+    setHasTextStarted(false)
+    hasTextStartedRef.current = false
     setLastMeta(null)
 
     const tempUserMsg: Message = {
@@ -87,12 +94,22 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
             })
           }
         },
+        onThinking: (token) => {
+          setThinkingBuffer((prev) => prev + token)
+        },
         onToken: (token) => {
+          if (!hasTextStartedRef.current) {
+            hasTextStartedRef.current = true
+            setHasTextStarted(true)
+          }
           setStreamBuffer((prev) => prev + token)
         },
         onDone: () => {
           setIsStreaming(false)
           setStreamBuffer('')
+          setThinkingBuffer('')
+          setHasTextStarted(false)
+          hasTextStartedRef.current = false
           if (conversationId) {
             queryClient.invalidateQueries({ queryKey: ['messages', team.id, conversationId] })
           }
@@ -100,6 +117,9 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         onError: (err) => {
           setIsStreaming(false)
           setStreamBuffer('')
+          setThinkingBuffer('')
+          setHasTextStarted(false)
+          hasTextStartedRef.current = false
           queryClient.setQueryData<Message[]>(
             ['messages', team.id, conversationId],
             (old) => [...(old ?? []), {
@@ -127,26 +147,14 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
             <span>{team.name}</span>
             {lastMeta?.mode_detected && (
               <>
-                <span className="text-gray-700">·</span>
+                <span className="text-gray-700">&middot;</span>
                 <span className="text-indigo-400">{lastMeta.mode_detected} mode</span>
               </>
             )}
             {activeMode && !lastMeta?.mode_detected && (
               <>
-                <span className="text-gray-700">·</span>
+                <span className="text-gray-700">&middot;</span>
                 <span className="text-indigo-400">{activeMode.name} mode</span>
-              </>
-            )}
-            {lastMeta && (
-              <>
-                <span className="text-gray-700">·</span>
-                <span className="text-gray-600">{lastMeta.modules_loaded} modules · {lastMeta.prompt_tokens} prompt tokens</span>
-                {lastMeta.domains_matched.length > 0 && (
-                  <>
-                    <span className="text-gray-700">·</span>
-                    <span className="text-emerald-600">{lastMeta.domains_matched.join(', ')}</span>
-                  </>
-                )}
               </>
             )}
           </div>
@@ -165,10 +173,18 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
             <p className="text-xs text-gray-600">analysis · solution design · implementation · tender response · architecture review · business process</p>
           </div>
         )}
-        {messages.map((msg) => (
-          <ChatMessage key={msg.id} message={msg} />
+        {messages.map((msg, idx) => (
+          <div key={msg.id}>
+            <ChatMessage message={msg} />
+            {msg.role === 'user' && idx === messages.length - 1 && lastMeta && !isStreaming && (
+              <ProcessTimeline meta={lastMeta} />
+            )}
+          </div>
         ))}
-        {isStreaming && streamBuffer && (
+        {isStreaming && lastMeta && (
+          <ProcessTimeline meta={lastMeta} />
+        )}
+        {isStreaming && (streamBuffer || thinkingBuffer) && (
           <ChatMessage
             message={{
               id: 'streaming',
@@ -178,6 +194,8 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
               created_at: new Date().toISOString(),
             }}
             isStreaming
+            thinkingContent={thinkingBuffer}
+            hasTextStarted={hasTextStarted}
           />
         )}
         <div ref={bottomRef} />
