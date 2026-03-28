@@ -344,10 +344,10 @@ async def list_provider_models(
     provider = result.scalar_one_or_none()
 
     api_key = provider.api_key_encrypted if provider else ""
-    base_url = provider.base_url if provider else ""
+    base_url = (provider.base_url or "").rstrip("/")
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             if provider_name == "ollama":
                 url = (base_url or "http://host.docker.internal:11434") + "/api/tags"
                 res = await client.get(url)
