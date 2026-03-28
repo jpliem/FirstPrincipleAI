@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Paperclip, Upload, Library, Loader2, FileText } from 'lucide-react'
+import { Paperclip, Upload, Library, Loader2, FileText, FolderUp } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useLibraryDocs } from '../hooks/useDocumentStatus'
@@ -17,6 +17,7 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
   const [open, setOpen] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadTarget, setUploadTarget] = useState<'conversation' | 'library'>('conversation')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
   const { data: libraryDocs = [] } = useLibraryDocs(teamId)
@@ -24,6 +25,27 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setOpen(false)
+
+    if (uploadTarget === 'library') {
+      // Upload to team library (no conversation_id)
+      setUploading(true)
+      try {
+        for (const file of Array.from(files)) {
+          const form = new FormData()
+          form.append('file', file)
+          await api.post(`/documents/${teamId}/upload`, form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+        }
+        queryClient.invalidateQueries({ queryKey: ['library-docs', teamId] })
+      } catch (err) {
+        console.error('Upload failed:', err)
+      } finally {
+        setUploading(false)
+        setUploadTarget('conversation')
+      }
+      return
+    }
 
     if (!conversationId) {
       for (const file of Array.from(files)) {
@@ -93,11 +115,18 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
           {!showLibrary ? (
             <>
               <button
-                onClick={() => { fileInputRef.current?.click(); setOpen(false) }}
+                onClick={() => { setUploadTarget('conversation'); fileInputRef.current?.click(); setOpen(false) }}
                 className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
               >
                 <Upload size={14} />
-                Upload file
+                Upload to chat
+              </button>
+              <button
+                onClick={() => { setUploadTarget('library'); fileInputRef.current?.click(); setOpen(false) }}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors border-t border-gray-700"
+              >
+                <FolderUp size={14} />
+                Upload to library
               </button>
               {conversationId && (
                 <button

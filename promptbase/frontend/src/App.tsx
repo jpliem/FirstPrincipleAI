@@ -10,7 +10,6 @@ import AdminModes from './pages/admin/AdminModes'
 import AdminTeams from './pages/admin/AdminTeams'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminProviders from './pages/admin/AdminProviders'
-import InvitePage from './pages/InvitePage'
 
 export default function App() {
   return (
@@ -18,7 +17,6 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/invite/:token" element={<InvitePage />} />
         <Route
           path="/"
           element={
