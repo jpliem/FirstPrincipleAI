@@ -10,6 +10,9 @@ MODEL_CONTEXT = {
     "mixtral": 32768, "codellama": 16384, "deepseek-coder": 16384,
 }
 
+# Cache for dynamically fetched context sizes
+_context_cache: dict[str, int] = {}
+
 
 class OllamaProvider(LLMProvider):
     async def stream_chat(self, system_prompt: str, messages: list[dict], config: LLMConfig) -> AsyncIterator[str]:
@@ -87,4 +90,9 @@ class OllamaProvider(LLMProvider):
         return len(text) // 4
 
     def max_context_tokens(self, model: str) -> int:
-        return MODEL_CONTEXT.get(model, 8192)
+        if model in MODEL_CONTEXT:
+            return MODEL_CONTEXT[model]
+        if model in _context_cache:
+            return _context_cache[model]
+        # Default to 32768 for unknown models — most modern models support at least this
+        return 32768

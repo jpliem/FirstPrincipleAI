@@ -108,6 +108,56 @@ async def chat_stream(
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+@router.post("/debug-compile")
+async def debug_compile(
+    body: ChatRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Debug endpoint: shows what the compiler would produce without calling the LLM."""
+    from app.chat.service import load_pack_for_team
+    from app.compiler.compiler import PromptCompiler
+    from app.documents.retriever import retrieve_document_context
+    from app.providers.registry import get_provider
+
+    provider_name, llm_config = await _load_llm_config(db, body.team_id)
+    pack_data = await load_pack_for_team(db, body.team_id)
+
+    provider = get_provider(provider_name)
+    context_limit = provider.max_context_tokens(llm_config.model) if provider else 128000
+
+    if pack_data:
+        compiler = PromptCompiler(
+            modules=pack_data["modules"], modes=pack_data["modes"],
+            model_context_limit=context_limit, condensed_core=pack_data["condensed_core"],
+        )
+    else:
+        compiler = PromptCompiler(modules=[], modes=[], model_context_limit=context_limit, condensed_core=None)
+
+    doc_context = ""
+    if body.document_ids:
+        doc_context = await retrieve_document_context(db, body.document_ids, query_embedding=None)
+
+    compiled = compiler.compile(
+        user_text=body.message, mode=body.mode, doc_context=doc_context,
+    )
+
+    return {
+        "provider": provider_name,
+        "model": llm_config.model,
+        "context_limit": context_limit,
+        "modules_loaded": compiled["modules_loaded"],
+        "domains_matched": compiled["domains_matched"],
+        "mode_detected": compiled["mode"],
+        "core_mode": compiled["core_mode"],
+        "total_tokens": compiled["total_tokens"],
+        "budget_remaining": compiled["budget_remaining"],
+        "trimmed": compiled["trimmed"],
+        "system_prompt_preview": compiled["system_prompt"][:2000] + "..." if len(compiled["system_prompt"]) > 2000 else compiled["system_prompt"],
+        "system_prompt_length": len(compiled["system_prompt"]),
+    }
+
+
 @router.get("/conversations/{team_id}", response_model=ConversationListResponse)
 async def list_conversations(
     team_id: uuid.UUID,

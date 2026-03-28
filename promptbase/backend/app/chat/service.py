@@ -113,14 +113,21 @@ async def stream_chat_response(
 
     pack_data = await load_pack_for_team(db, conversation.team_id)
 
+    # Get the provider's actual context window, not the response max_tokens
+    provider = get_provider(provider_name)
+    if provider:
+        context_limit = provider.max_context_tokens(llm_config.model)
+    else:
+        context_limit = 128000
+
     if pack_data:
         compiler = PromptCompiler(
             modules=pack_data["modules"], modes=pack_data["modes"],
-            model_context_limit=llm_config.max_tokens * 10,
+            model_context_limit=context_limit,
             condensed_core=pack_data["condensed_core"],
         )
     else:
-        compiler = PromptCompiler(modules=[], modes=[], model_context_limit=128000, condensed_core=None)
+        compiler = PromptCompiler(modules=[], modes=[], model_context_limit=context_limit, condensed_core=None)
 
     doc_context = ""
     if document_ids:
@@ -133,10 +140,17 @@ async def stream_chat_response(
         history_tokens=sum(count_tokens_approx(m["content"]) for m in history),
     )
 
-    provider = get_provider(provider_name)
     if not provider:
         yield f"Error: Provider '{provider_name}' not found"
         return
+
+    import logging
+    logger = logging.getLogger("promptbase.chat")
+    logger.info(
+        "Compiled prompt: %d modules loaded, %d tokens, core_mode=%s, mode=%s, trimmed=%s",
+        len(compiled["modules_loaded"]), compiled["total_tokens"],
+        compiled.get("core_mode"), compiled.get("mode"), compiled.get("trimmed"),
+    )
 
     messages = history + [{"role": "user", "content": user_message}]
     full_response = ""
