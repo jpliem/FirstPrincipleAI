@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Sparkles } from 'lucide-react'
 import { api } from '../api/client'
 import type { TaskMode, Team } from '../types'
 
@@ -8,7 +9,6 @@ interface Props {
 }
 
 export default function ModeSelector({ teamId, onModeChange }: Props) {
-  // Get team's pack_id first, then fetch modes for that pack
   const { data: team } = useQuery<Team>({
     queryKey: ['team', teamId],
     queryFn: async () => {
@@ -41,11 +41,14 @@ export default function ModeSelector({ teamId, onModeChange }: Props) {
         defaultValue=""
         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
       >
-        <option value="">Default (no mode)</option>
+        <option value="">Auto-detect from message</option>
         {modes.map((mode) => (
           <option key={mode.id} value={mode.id}>{mode.name}</option>
         ))}
       </select>
+      <p className="text-xs text-gray-600 mt-1 px-1 flex items-center gap-1">
+        <Sparkles size={10} /> Auto matches: analysis, design, implementation...
+      </p>
     </div>
   )
 }

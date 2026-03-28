@@ -92,14 +92,15 @@ async def load_pack_for_team(db: AsyncSession, team_id: uuid.UUID) -> dict | Non
     return {"modules": modules, "modes": modes, "condensed_core": pack.condensed_core}
 
 
-async def stream_chat_response(
+async def prepare_chat(
     db: AsyncSession,
     conversation: Conversation,
     user_message: str,
     document_ids: list[uuid.UUID],
     provider_name: str,
     llm_config: LLMConfig,
-) -> AsyncIterator[str]:
+) -> dict:
+    """Prepare the chat: save user message, compile prompt, return metadata + ready state."""
     user_msg = Message(
         conversation_id=conversation.id, role="user",
         content=user_message, token_count=count_tokens_approx(user_message),
@@ -113,16 +114,13 @@ async def stream_chat_response(
 
     pack_data = await load_pack_for_team(db, conversation.team_id)
 
-    # Get the provider's actual context window dynamically
     provider = get_provider(provider_name)
-    if provider:
-        # For Ollama, fetch actual context size from the server
-        if hasattr(provider, "fetch_context_size"):
-            context_limit = await provider.fetch_context_size(
-                llm_config.model, llm_config.base_url or "http://localhost:11434"
-            )
-        else:
-            context_limit = provider.max_context_tokens(llm_config.model)
+    if provider and hasattr(provider, "fetch_context_size"):
+        context_limit = await provider.fetch_context_size(
+            llm_config.model, llm_config.base_url or "http://localhost:11434"
+        )
+    elif provider:
+        context_limit = provider.max_context_tokens(llm_config.model)
     else:
         context_limit = 128000
 
@@ -146,23 +144,36 @@ async def stream_chat_response(
         history_tokens=sum(count_tokens_approx(m["content"]) for m in history),
     )
 
-    if not provider:
-        yield f"Error: Provider '{provider_name}' not found"
-        return
-
-    import logging
-    logger = logging.getLogger("promptbase.chat")
-    logger.info(
-        "Compiled prompt: %d modules loaded, %d tokens, core_mode=%s, mode=%s, trimmed=%s",
-        len(compiled["modules_loaded"]), compiled["total_tokens"],
-        compiled.get("core_mode"), compiled.get("mode"), compiled.get("trimmed"),
-    )
-
-    # Dynamic max_tokens — use remaining budget for the response
+    # Dynamic max_tokens
     history_tokens = sum(count_tokens_approx(m["content"]) for m in history)
     used_tokens = compiled["total_tokens"] + history_tokens + count_tokens_approx(user_message)
-    dynamic_max = max(1024, context_limit - used_tokens - 256)  # 256 buffer
+    dynamic_max = max(1024, context_limit - used_tokens - 256)
     llm_config.max_tokens = min(llm_config.max_tokens, dynamic_max)
+
+    return {
+        "provider": provider,
+        "compiled": compiled,
+        "history": history,
+        "context_limit": context_limit,
+        "llm_config": llm_config,
+    }
+
+
+async def stream_chat_response(
+    db: AsyncSession,
+    conversation: Conversation,
+    user_message: str,
+    prepared: dict,
+) -> AsyncIterator[str]:
+    """Stream the LLM response using pre-compiled prompt."""
+    provider = prepared["provider"]
+    compiled = prepared["compiled"]
+    history = prepared["history"]
+    llm_config = prepared["llm_config"]
+
+    if not provider:
+        yield "Error: Provider not found"
+        return
 
     messages = history + [{"role": "user", "content": user_message}]
     full_response = ""

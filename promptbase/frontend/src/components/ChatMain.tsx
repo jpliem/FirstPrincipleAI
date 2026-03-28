@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
-import { useSSE } from '../hooks/useSSE'
+import { useSSE, type ChatMeta } from '../hooks/useSSE'
 import type { Team, Conversation, Message, TaskMode } from '../types'
 import ChatMessage from './ChatMessage'
 import ChatInput from './ChatInput'
@@ -21,6 +21,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamBuffer, setStreamBuffer] = useState('')
   const [conversationId, setConversationId] = useState<string | null>(conversation?.id ?? null)
+  const [lastMeta, setLastMeta] = useState<ChatMeta | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
 
     setIsStreaming(true)
     setStreamBuffer('')
+    setLastMeta(null)
 
     const tempUserMsg: Message = {
       id: `temp-${Date.now()}`,
@@ -73,12 +75,13 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         mode: activeMode?.name ?? null,
       },
       {
-        onConversationId: (id) => {
-          setConversationId(id)
+        onMeta: (meta) => {
+          setLastMeta(meta)
+          setConversationId(meta.conversation_id)
           queryClient.invalidateQueries({ queryKey: ['conversations', team.id] })
           if (!conversationId) {
             onConversationCreated({
-              id, title: message.slice(0, 60), mode: activeMode?.name ?? null,
+              id: meta.conversation_id, title: message.slice(0, 60), mode: meta.mode_detected,
               created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               message_count: 1,
             })
@@ -97,7 +100,6 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         onError: (err) => {
           setIsStreaming(false)
           setStreamBuffer('')
-          // Show error as assistant message
           queryClient.setQueryData<Message[]>(
             ['messages', team.id, conversationId],
             (old) => [...(old ?? []), {
@@ -121,10 +123,36 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
           <h1 className="text-sm font-semibold text-white">
             {conversation?.title ?? 'New Conversation'}
           </h1>
-          <p className="text-xs text-gray-500">{team.name}{activeMode && ` · ${activeMode.name}`}</p>
+          <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+            <span>{team.name}</span>
+            {lastMeta?.mode_detected && (
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="text-indigo-400">{lastMeta.mode_detected} mode</span>
+              </>
+            )}
+            {activeMode && !lastMeta?.mode_detected && (
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="text-indigo-400">{activeMode.name} mode</span>
+              </>
+            )}
+            {lastMeta && (
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="text-gray-600">{lastMeta.modules_loaded} modules · {lastMeta.prompt_tokens} prompt tokens</span>
+                {lastMeta.domains_matched.length > 0 && (
+                  <>
+                    <span className="text-gray-700">·</span>
+                    <span className="text-emerald-600">{lastMeta.domains_matched.join(', ')}</span>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
         {conversationId && (
-          <ExportButton conversationId={conversationId} label="Export Conversation" />
+          <ExportButton conversationId={conversationId} label="Export" />
         )}
       </header>
 
@@ -133,7 +161,8 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         {messages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
             <p className="text-lg font-medium text-gray-400">Start a conversation</p>
-            <p className="text-sm">Type a message below. Upload documents in the sidebar to chat with them.</p>
+            <p className="text-sm">Type a message below. Mode auto-detects from your message.</p>
+            <p className="text-xs text-gray-600">analysis · solution design · implementation · tender response · architecture review · business process</p>
           </div>
         )}
         {messages.map((msg) => (

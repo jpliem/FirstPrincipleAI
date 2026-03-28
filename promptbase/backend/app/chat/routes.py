@@ -15,7 +15,7 @@ from app.chat.schemas import (
     ConversationResponse,
     MessageResponse,
 )
-from app.chat.service import get_or_create_conversation, stream_chat_response
+from app.chat.service import get_or_create_conversation, prepare_chat, stream_chat_response
 from app.config import settings
 from app.database import get_db
 from app.providers.base import LLMConfig
@@ -90,12 +90,30 @@ async def chat_stream(
 
     provider_name, llm_config = await _load_llm_config(db, body.team_id)
 
+    # Prepare: compile prompt, detect mode, calculate budget
+    prepared = await prepare_chat(
+        db, conversation, body.message, body.document_ids,
+        provider_name, llm_config,
+    )
+    compiled = prepared["compiled"]
+
+    import json as _json
+
     async def event_stream():
-        yield f"data: {{\"conversation_id\": \"{conversation.id}\"}}\n\n"
+        # First event: metadata (conversation ID, detected mode, modules loaded, token budget)
+        meta = {
+            "conversation_id": str(conversation.id),
+            "mode_detected": compiled.get("mode"),
+            "modules_loaded": len(compiled.get("modules_loaded", [])),
+            "domains_matched": compiled.get("domains_matched", []),
+            "prompt_tokens": compiled.get("total_tokens", 0),
+            "context_limit": prepared.get("context_limit", 0),
+        }
+        yield f"data: {_json.dumps(meta)}\n\n"
+
         try:
             async for token in stream_chat_response(
-                db, conversation, body.message, body.document_ids,
-                provider_name=provider_name, llm_config=llm_config,
+                db, conversation, body.message, prepared,
             ):
                 escaped = token.replace("\n", "\\n")
                 yield f"data: {escaped}\n\n"

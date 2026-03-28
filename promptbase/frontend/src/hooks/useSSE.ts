@@ -1,9 +1,18 @@
 import { useRef, useCallback } from 'react'
 import { getAccessToken } from '../api/client'
 
+export interface ChatMeta {
+  conversation_id: string
+  mode_detected: string | null
+  modules_loaded: number
+  domains_matched: string[]
+  prompt_tokens: number
+  context_limit: number
+}
+
 interface SSEOptions {
   onToken: (token: string) => void
-  onConversationId: (id: string) => void
+  onMeta: (meta: ChatMeta) => void
   onDone: () => void
   onError: (err: string) => void
 }
@@ -22,7 +31,6 @@ export function useSSE() {
       },
       opts: SSEOptions
     ) => {
-      // Cancel any existing stream
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
@@ -47,6 +55,7 @@ export function useSSE() {
         const reader = res.body!.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
+        let metaReceived = false
 
         while (true) {
           const { done, value } = await reader.read()
@@ -61,15 +70,20 @@ export function useSSE() {
             const data = line.slice(6).trim()
             if (data === '[DONE]') { opts.onDone(); return }
             if (data.startsWith('[ERROR]')) { opts.onError(data.slice(8)); opts.onDone(); return }
-            // First event contains conversation_id JSON
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.conversation_id) {
-                opts.onConversationId(parsed.conversation_id)
-                continue
-              }
-            } catch {}
-            // Otherwise it's a token (newlines escaped as \\n)
+
+            // First event is metadata JSON
+            if (!metaReceived) {
+              try {
+                const parsed = JSON.parse(data)
+                if (parsed.conversation_id) {
+                  metaReceived = true
+                  opts.onMeta(parsed as ChatMeta)
+                  continue
+                }
+              } catch {}
+            }
+
+            // Token
             opts.onToken(data.replace(/\\n/g, '\n'))
           }
         }
