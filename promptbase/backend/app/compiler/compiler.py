@@ -80,6 +80,12 @@ class PromptCompiler:
             "system_prompt": system_prompt,
             "total_tokens": result["total_tokens"] + count_tokens_approx(SAFETY_WRAPPER),
             "modules_loaded": modules_loaded,
+            "modules_by_layer": {
+                "core": [m["name"] for m in self.modules if m["layer"] == "core"],
+                "always": [m["name"] for m in self.modules if m["layer"] == "always"],
+                "domain": [m["name"] for m in self.modules if m["layer"] == "domain"
+                           and m["name"] in modules_loaded],
+            },
             "domains_matched": list(matched_domains),
             "mode": detected_mode,
             "trimmed": result["trimmed"],

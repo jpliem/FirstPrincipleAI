@@ -164,27 +164,37 @@ async def stream_chat_response(
     conversation: Conversation,
     user_message: str,
     prepared: dict,
-) -> AsyncIterator[str]:
-    """Stream the LLM response using pre-compiled prompt."""
+) -> AsyncIterator[tuple[str, str]]:
+    """Stream the LLM response, parsing <think> tags into typed events."""
+    from app.chat.think_parser import ThinkTagParser
+
     provider = prepared["provider"]
     compiled = prepared["compiled"]
     history = prepared["history"]
     llm_config = prepared["llm_config"]
 
     if not provider:
-        yield "Error: Provider not found"
+        yield ("text", "Error: Provider not found")
         return
 
     messages = history + [{"role": "user", "content": user_message}]
-    full_response = ""
+    parser = ThinkTagParser()
 
     async for token in provider.stream_chat(compiled["system_prompt"], messages, llm_config):
-        full_response += token
-        yield token
+        for event in parser.feed(token):
+            yield event
+
+    for event in parser.flush():
+        yield event
+
+    # Save message with separated content
+    content = parser.text_content
+    thinking = parser.thinking_content or None
 
     assistant_msg = Message(
         conversation_id=conversation.id, role="assistant",
-        content=full_response, token_count=count_tokens_approx(full_response),
+        content=content, thinking_content=thinking,
+        token_count=count_tokens_approx(content),
     )
     db.add(assistant_msg)
     await db.commit()

@@ -100,23 +100,29 @@ async def chat_stream(
     import json as _json
 
     async def event_stream():
-        # First event: metadata (conversation ID, detected mode, modules loaded, token budget)
+        # First event: expanded metadata
         meta = {
             "conversation_id": str(conversation.id),
+            "provider": provider_name,
+            "model": llm_config.model,
             "mode_detected": compiled.get("mode"),
-            "modules_loaded": len(compiled.get("modules_loaded", [])),
+            "modules_loaded": compiled.get("modules_loaded", []),
+            "modules_by_layer": compiled.get("modules_by_layer", {}),
+            "core_mode": compiled.get("core_mode"),
             "domains_matched": compiled.get("domains_matched", []),
             "prompt_tokens": compiled.get("total_tokens", 0),
             "context_limit": prepared.get("context_limit", 0),
+            "budget_remaining": compiled.get("budget_remaining", 0),
+            "trimmed": compiled.get("trimmed", []),
         }
         yield f"data: {_json.dumps(meta)}\n\n"
 
         try:
-            async for token in stream_chat_response(
+            async for event_type, content in stream_chat_response(
                 db, conversation, body.message, prepared,
             ):
-                escaped = token.replace("\n", "\\n")
-                yield f"data: {escaped}\n\n"
+                escaped = content.replace("\n", "\\n")
+                yield f"data: {event_type}:{escaped}\n\n"
         except Exception as e:
             import traceback
             traceback.print_exc()
