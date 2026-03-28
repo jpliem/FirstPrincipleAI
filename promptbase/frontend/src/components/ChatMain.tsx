@@ -11,15 +11,15 @@ interface Props {
   team: Team
   conversation: Conversation | null
   onConversationCreated: (conv: Conversation) => void
+  activeMode: TaskMode | null
+  selectedDocIds: string[]
 }
 
-export default function ChatMain({ team, conversation, onConversationCreated }: Props) {
+export default function ChatMain({ team, conversation, onConversationCreated, activeMode, selectedDocIds }: Props) {
   const queryClient = useQueryClient()
   const { startStream, cancel } = useSSE()
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamBuffer, setStreamBuffer] = useState('')
-  const [activeMode, setActiveMode] = useState<TaskMode | null>(null)
-  const [selectedDocIds] = useState<string[]>([])
   const [conversationId, setConversationId] = useState<string | null>(conversation?.id ?? null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -52,7 +52,6 @@ export default function ChatMain({ team, conversation, onConversationCreated }: 
     setIsStreaming(true)
     setStreamBuffer('')
 
-    // Optimistically add user message to UI
     const tempUserMsg: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
@@ -76,12 +75,10 @@ export default function ChatMain({ team, conversation, onConversationCreated }: 
       {
         onConversationId: (id) => {
           setConversationId(id)
-          // Trigger conversation list refresh
           queryClient.invalidateQueries({ queryKey: ['conversations', team.id] })
-          // If brand new conversation, notify parent
           if (!conversationId) {
             onConversationCreated({
-              id, title: 'New conversation', mode: activeMode?.name ?? null,
+              id, title: message.slice(0, 60), mode: activeMode?.name ?? null,
               created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               message_count: 1,
             })
@@ -93,19 +90,28 @@ export default function ChatMain({ team, conversation, onConversationCreated }: 
         onDone: () => {
           setIsStreaming(false)
           setStreamBuffer('')
-          // Refresh messages from server to get persisted IDs
-          queryClient.invalidateQueries({ queryKey: ['messages', team.id, conversationId] })
+          if (conversationId) {
+            queryClient.invalidateQueries({ queryKey: ['messages', team.id, conversationId] })
+          }
         },
         onError: (err) => {
           setIsStreaming(false)
           setStreamBuffer('')
-          console.error('SSE error:', err)
+          // Show error as assistant message
+          queryClient.setQueryData<Message[]>(
+            ['messages', team.id, conversationId],
+            (old) => [...(old ?? []), {
+              id: `error-${Date.now()}`,
+              role: 'assistant',
+              content: `**Error:** ${err}`,
+              token_count: 0,
+              created_at: new Date().toISOString(),
+            }]
+          )
         },
       }
     )
   }
-
-  const allMessages = [...messages]
 
   return (
     <div className="flex flex-col h-full">
@@ -124,13 +130,13 @@ export default function ChatMain({ team, conversation, onConversationCreated }: 
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto divide-y divide-gray-800/50">
-        {allMessages.length === 0 && !isStreaming && (
+        {messages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
             <p className="text-lg font-medium text-gray-400">Start a conversation</p>
-            <p className="text-sm">Upload documents in the sidebar, then ask questions about them.</p>
+            <p className="text-sm">Type a message below. Upload documents in the sidebar to chat with them.</p>
           </div>
         )}
-        {allMessages.map((msg) => (
+        {messages.map((msg) => (
           <ChatMessage key={msg.id} message={msg} />
         ))}
         {isStreaming && streamBuffer && (

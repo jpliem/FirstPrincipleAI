@@ -1,7 +1,7 @@
 import { PlusCircle, LogOut, Settings } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import type { Team, Conversation } from '../types'
+import type { Team, Conversation, TaskMode } from '../types'
 import ConversationList from './ConversationList'
 import DocumentUpload from './DocumentUpload'
 import ModeSelector from './ModeSelector'
@@ -13,11 +13,14 @@ interface Props {
   activeConversation: Conversation | null
   onSelectConversation: (conv: Conversation) => void
   onNewConversation: () => void
+  onModeChange: (mode: TaskMode | null) => void
+  onDocumentsChange: (docIds: string[]) => void
 }
 
 export default function ChatSidebar({
   teams, activeTeam, onSelectTeam,
   activeConversation, onSelectConversation, onNewConversation,
+  onModeChange, onDocumentsChange,
 }: Props) {
   const { user, logout } = useAuth()
 
@@ -53,14 +56,14 @@ export default function ChatSidebar({
       {/* Mode selector */}
       {activeTeam && (
         <div className="px-3 py-2 border-b border-gray-800">
-          <ModeSelector teamId={activeTeam.id} />
+          <ModeSelector teamId={activeTeam.id} onModeChange={onModeChange} />
         </div>
       )}
 
       {/* Document upload */}
       {activeTeam && (
         <div className="px-3 py-2 border-b border-gray-800">
-          <DocumentUpload teamId={activeTeam.id} />
+          <DocumentUpload teamId={activeTeam.id} onDocumentsChange={onDocumentsChange} />
         </div>
       )}
 
@@ -80,19 +83,11 @@ export default function ChatSidebar({
         <span className="text-xs text-gray-400 truncate">{user?.name}</span>
         <div className="flex gap-2">
           {user?.is_super_admin && (
-            <Link
-              to="/admin"
-              className="p-1.5 text-gray-400 hover:text-white rounded transition-colors"
-              title="Admin"
-            >
+            <Link to="/admin" className="p-1.5 text-gray-400 hover:text-white rounded transition-colors" title="Admin">
               <Settings size={16} />
             </Link>
           )}
-          <button
-            onClick={logout}
-            className="p-1.5 text-gray-400 hover:text-white rounded transition-colors"
-            title="Sign out"
-          >
+          <button onClick={logout} className="p-1.5 text-gray-400 hover:text-white rounded transition-colors" title="Sign out">
             <LogOut size={16} />
           </button>
         </div>
