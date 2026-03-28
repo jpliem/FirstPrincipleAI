@@ -1,0 +1,217 @@
+import io
+import json
+import uuid
+import zipfile
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.admin.importer import import_pack_from_zip
+from app.auth.dependencies import get_current_user
+from app.auth.models import Team, User
+from app.auth.service import get_user_team_role
+from app.compiler.budget import count_tokens_approx
+from app.compiler.models import PromptModule, PromptPack, TaskMode
+from app.compiler.schemas import (
+    PromptModuleCreate,
+    PromptModuleResponse,
+    PromptPackCreate,
+    PromptPackResponse,
+    TaskModeCreate,
+    TaskModeResponse,
+)
+from app.database import get_db
+
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+@router.get("/packs", response_model=list[PromptPackResponse])
+async def list_packs(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(PromptPack).order_by(PromptPack.created_at.desc()))
+    packs = result.scalars().all()
+    return [
+        PromptPackResponse(
+            id=p.id, name=p.name, version=p.version, description=p.description,
+            team_id=p.team_id, created_at=p.created_at.isoformat(),
+        )
+        for p in packs
+    ]
+
+
+@router.post("/packs", response_model=PromptPackResponse, status_code=status.HTTP_201_CREATED)
+async def create_pack(
+    body: PromptPackCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    pack = PromptPack(name=body.name, version=body.version, description=body.description)
+    db.add(pack)
+    await db.commit()
+    await db.refresh(pack)
+    return PromptPackResponse(
+        id=pack.id, name=pack.name, version=pack.version,
+        description=pack.description, team_id=pack.team_id, created_at=pack.created_at.isoformat(),
+    )
+
+
+@router.post("/packs/import")
+async def import_pack(
+    file: UploadFile, name: str = "Imported Pack",
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin required")
+    contents = await file.read()
+    pack = await import_pack_from_zip(db, contents, name)
+    return {"id": str(pack.id), "name": pack.name, "version": pack.version}
+
+
+@router.get("/packs/{pack_id}/export")
+async def export_pack(
+    pack_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    pack_result = await db.execute(select(PromptPack).where(PromptPack.id == pack_id))
+    pack = pack_result.scalar_one_or_none()
+    if not pack:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    modules_result = await db.execute(
+        select(PromptModule).where(PromptModule.pack_id == pack_id).order_by(PromptModule.sort_order)
+    )
+    modules = modules_result.scalars().all()
+
+    modes_result = await db.execute(select(TaskMode).where(TaskMode.pack_id == pack_id))
+    modes = modes_result.scalars().all()
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest = {
+            "version": pack.version, "description": pack.description,
+            "core": [m.filename for m in modules if m.layer == "core"],
+            "always_append": [m.filename for m in modules if m.layer == "always"],
+            "domains": {},
+            "modes": [{"name": m.name, "prompt_text": m.prompt_text, "form_schema": m.form_schema} for m in modes],
+        }
+
+        for m in modules:
+            if m.layer == "domain":
+                key = m.filename.replace(".md", "").lower()
+                manifest["domains"][key] = [m.filename]
+
+            frontmatter = f"---\ntitle: {m.title}\ntags: {json.dumps(m.tags or [])}\npriority: {m.priority}\nlayer: {m.layer}\n---\n\n"
+            zf.writestr(f"prompts/{m.filename}", frontmatter + m.content)
+
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer, media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={pack.name}.zip"},
+    )
+
+
+@router.get("/packs/{pack_id}/modules", response_model=list[PromptModuleResponse])
+async def list_modules(
+    pack_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(PromptModule).where(PromptModule.pack_id == pack_id).order_by(PromptModule.sort_order)
+    )
+    return result.scalars().all()
+
+
+@router.post("/packs/{pack_id}/modules", response_model=PromptModuleResponse, status_code=status.HTTP_201_CREATED)
+async def create_module(
+    pack_id: uuid.UUID, body: PromptModuleCreate,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    module = PromptModule(
+        pack_id=pack_id, filename=body.filename, title=body.title, layer=body.layer,
+        tags=body.tags, priority=body.priority, content=body.content,
+        token_count=count_tokens_approx(body.content), max_tokens=body.max_tokens, sort_order=body.sort_order,
+    )
+    db.add(module)
+    await db.commit()
+    await db.refresh(module)
+    return module
+
+
+@router.put("/modules/{module_id}", response_model=PromptModuleResponse)
+async def update_module(
+    module_id: uuid.UUID, body: PromptModuleCreate,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(PromptModule).where(PromptModule.id == module_id))
+    module = result.scalar_one_or_none()
+    if not module:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    module.filename = body.filename
+    module.title = body.title
+    module.layer = body.layer
+    module.tags = body.tags
+    module.priority = body.priority
+    module.content = body.content
+    module.token_count = count_tokens_approx(body.content)
+    module.max_tokens = body.max_tokens
+    module.sort_order = body.sort_order
+
+    await db.commit()
+    await db.refresh(module)
+    return module
+
+
+@router.delete("/modules/{module_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_module(
+    module_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(PromptModule).where(PromptModule.id == module_id))
+    module = result.scalar_one_or_none()
+    if not module:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await db.delete(module)
+    await db.commit()
+
+
+@router.get("/packs/{pack_id}/modes", response_model=list[TaskModeResponse])
+async def list_modes(
+    pack_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(TaskMode).where(TaskMode.pack_id == pack_id).order_by(TaskMode.sort_order)
+    )
+    return result.scalars().all()
+
+
+@router.post("/packs/{pack_id}/modes", response_model=TaskModeResponse, status_code=status.HTTP_201_CREATED)
+async def create_mode(
+    pack_id: uuid.UUID, body: TaskModeCreate,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    mode = TaskMode(
+        pack_id=pack_id, name=body.name, prompt_text=body.prompt_text,
+        form_schema=body.form_schema, sort_order=body.sort_order,
+    )
+    db.add(mode)
+    await db.commit()
+    await db.refresh(mode)
+    return mode
+
+
+@router.put("/teams/{team_id}/pack")
+async def assign_pack_to_team(
+    team_id: uuid.UUID, pack_id: uuid.UUID,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    role = await get_user_team_role(db, user.id, team_id)
+    if role != "admin" and not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    result = await db.execute(select(Team).where(Team.id == team_id))
+    team = result.scalar_one_or_none()
+    if not team:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    team.pack_id = pack_id
+    await db.commit()
+    return {"team_id": str(team_id), "pack_id": str(pack_id)}
