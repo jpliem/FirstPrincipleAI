@@ -12,6 +12,7 @@ class DocumentResponse(BaseModel):
     status: str
     strategy: str | None
     token_count: int
+    conversation_id: uuid.UUID | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -19,3 +20,7 @@ class DocumentResponse(BaseModel):
 
 class DocumentListResponse(BaseModel):
     documents: list[DocumentResponse]
+
+
+class AttachRequest(BaseModel):
+    document_id: uuid.UUID
