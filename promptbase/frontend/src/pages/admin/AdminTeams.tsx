@@ -262,8 +262,9 @@ export default function AdminTeams() {
                       <input type="text" value={llmForm.embedding_model} onChange={(e) => setLlmForm({ ...llmForm, embedding_model: e.target.value })} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Max Tokens</label>
+                      <label className="block text-xs text-gray-400 mb-1">Max Response Tokens</label>
                       <input type="number" value={llmForm.max_tokens_per_request} onChange={(e) => setLlmForm({ ...llmForm, max_tokens_per_request: Number(e.target.value) })} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white" />
+                      <p className="text-xs text-gray-600 mt-0.5">Upper limit for AI response length. Actual limit adjusts dynamically based on prompt + document + history size.</p>
                     </div>
                     <div>
                       <label className="block text-xs text-gray-400 mb-1">Temperature</label>

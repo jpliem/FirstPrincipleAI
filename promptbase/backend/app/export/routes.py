@@ -82,6 +82,8 @@ async def _export_markdown(
         pdf_path = convert_to_pdf(tmp.name)
         if pdf_path:
             return FileResponse(pdf_path, media_type="application/pdf", filename=f"{filename_base}.pdf")
+        # LibreOffice not available — fall back to DOCX with correct name
+        filename_base = filename_base.replace(".pdf", "")
 
     return FileResponse(
         tmp.name,

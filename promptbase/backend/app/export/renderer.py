@@ -104,11 +104,32 @@ def _render_inline(para, children: list):
             run.font.size = Pt(9)
 
         elif child_type == "link":
+            # Render link text, and URL in parentheses if present
             text = _extract_text(child.get("children", []))
+            url = child.get("attrs", {}).get("url", child.get("link", ""))
             para.add_run(text)
+            if url and url != text:
+                run = para.add_run(f" ({url})")
+                run.font.size = Pt(8)
+                run.font.color.rgb = RGBColor(100, 100, 200)
+
+        elif child_type == "image":
+            alt = child.get("attrs", {}).get("alt", child.get("alt", ""))
+            para.add_run(f"[Image: {alt}]" if alt else "[Image]")
 
         elif child_type == "softbreak":
             para.add_run("\n")
+
+        elif child_type == "linebreak":
+            para.add_run("\n")
+
+        else:
+            # Fallback — extract any text from unknown inline types
+            text = _extract_text(child.get("children", []))
+            if not text:
+                text = child.get("raw", child.get("text", ""))
+            if text:
+                para.add_run(text)
 
 
 def _extract_text(children: list) -> str:
