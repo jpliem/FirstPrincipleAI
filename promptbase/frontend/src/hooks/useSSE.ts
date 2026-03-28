@@ -60,6 +60,7 @@ export function useSSE() {
             if (!line.startsWith('data: ')) continue
             const data = line.slice(6).trim()
             if (data === '[DONE]') { opts.onDone(); return }
+            if (data.startsWith('[ERROR]')) { opts.onError(data.slice(8)); opts.onDone(); return }
             // First event contains conversation_id JSON
             try {
               const parsed = JSON.parse(data)

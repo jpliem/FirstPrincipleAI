@@ -13,34 +13,70 @@ MODEL_CONTEXT = {
 
 class OllamaProvider(LLMProvider):
     async def stream_chat(self, system_prompt: str, messages: list[dict], config: LLMConfig) -> AsyncIterator[str]:
-        base_url = config.base_url or "http://localhost:11434"
+        base_url = (config.base_url or "http://localhost:11434").rstrip("/")
         full_messages = [{"role": "system", "content": system_prompt}] + messages
 
-        async with httpx.AsyncClient() as client:
-            async with client.stream(
-                "POST", f"{base_url}/api/chat",
-                json={"model": config.model, "messages": full_messages, "stream": True, "options": {"temperature": config.temperature, "num_predict": config.max_tokens}},
-                timeout=120.0,
-            ) as response:
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                        content = chunk.get("message", {}).get("content", "")
-                        if content:
-                            yield content
-                    except json.JSONDecodeError:
-                        continue
+        timeout = httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0)
+
+        async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
+            try:
+                async with client.stream(
+                    "POST",
+                    f"{base_url}/api/chat",
+                    json={
+                        "model": config.model,
+                        "messages": full_messages,
+                        "stream": True,
+                        "options": {
+                            "temperature": config.temperature,
+                            "num_predict": config.max_tokens,
+                        },
+                    },
+                ) as response:
+                    if response.status_code != 200:
+                        body = await response.aread()
+                        yield f"[Ollama error {response.status_code}: {body.decode()[:300]}]"
+                        return
+
+                    thinking_done = False
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                            if chunk.get("error"):
+                                yield f"[Ollama error: {chunk['error']}]"
+                                return
+                            msg = chunk.get("message", {})
+                            content = msg.get("content", "")
+                            thinking = msg.get("thinking", "")
+
+                            # Some models (qwen, deepseek) use a "thinking" field
+                            # before producing content. Show content when available,
+                            # skip thinking tokens (internal reasoning).
+                            if content:
+                                if thinking and not thinking_done:
+                                    thinking_done = True
+                                yield content
+                            # If model ONLY uses thinking (no content at all),
+                            # we'd need to yield thinking. But wait for content first.
+                        except json.JSONDecodeError:
+                            continue
+            except httpx.ConnectError as e:
+                yield f"[Cannot connect to Ollama at {base_url}: {e}]"
+            except httpx.ReadTimeout:
+                yield f"[Ollama read timeout — model may be loading or server is slow]"
+            except Exception as e:
+                yield f"[Ollama error: {type(e).__name__}: {e}]"
 
     async def embed(self, texts: list[str], config: LLMConfig) -> list[list[float]]:
-        base_url = config.base_url or "http://localhost:11434"
+        base_url = (config.base_url or "http://localhost:11434").rstrip("/")
         embeddings = []
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
             for text in texts:
                 response = await client.post(
                     f"{base_url}/api/embeddings",
-                    json={"model": config.model, "prompt": text}, timeout=60.0,
+                    json={"model": config.model, "prompt": text},
                 )
                 response.raise_for_status()
                 data = response.json()

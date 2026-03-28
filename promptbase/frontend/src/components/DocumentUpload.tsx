@@ -10,7 +10,7 @@ interface Props {
   onDocumentsChange?: (docIds: string[]) => void
 }
 
-const STATUS_ICON = {
+const STATUS_ICON: Record<string, React.ReactNode> = {
   pending: <Loader2 size={12} className="animate-spin text-yellow-400" />,
   processing: <Loader2 size={12} className="animate-spin text-blue-400" />,
   ready: <CheckCircle2 size={12} className="text-green-400" />,
@@ -27,14 +27,37 @@ export default function DocumentUpload({ teamId, onDocumentsChange }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const queryClient = useQueryClient()
   const { data: documents = [] } = useDocuments(teamId)
 
-  // Notify parent when ready documents change
+  // Notify parent when selection changes
+  useEffect(() => {
+    onDocumentsChange?.(Array.from(selectedIds))
+  }, [selectedIds, onDocumentsChange])
+
+  // Auto-select newly ready documents
   useEffect(() => {
     const readyIds = documents.filter((d) => d.status === 'ready').map((d) => d.id)
-    onDocumentsChange?.(readyIds)
-  }, [documents, onDocumentsChange])
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of readyIds) next.add(id)
+      // Remove IDs that no longer exist
+      for (const id of prev) {
+        if (!documents.find((d) => d.id === id)) next.delete(id)
+      }
+      return next
+    })
+  }, [documents])
+
+  const toggleDoc = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const upload = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -56,13 +79,16 @@ export default function DocumentUpload({ teamId, onDocumentsChange }: Props) {
   }
 
   const deleteDocument = async (doc: Document) => {
+    setSelectedIds((prev) => { const next = new Set(prev); next.delete(doc.id); return next })
     await api.delete(`/documents/${teamId}/${doc.id}`)
     queryClient.invalidateQueries({ queryKey: ['documents', teamId] })
   }
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-1">Documents</p>
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-1">
+        Documents {selectedIds.size > 0 && <span className="text-indigo-400">({selectedIds.size} active)</span>}
+      </p>
 
       <div
         onClick={() => fileInputRef.current?.click()}
@@ -87,12 +113,30 @@ export default function DocumentUpload({ teamId, onDocumentsChange }: Props) {
       {documents.length > 0 && (
         <div className="space-y-1 max-h-48 overflow-y-auto">
           {documents.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gray-800/50 group">
+            <div
+              key={doc.id}
+              onClick={() => doc.status === 'ready' && toggleDoc(doc.id)}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group cursor-pointer transition-colors ${
+                selectedIds.has(doc.id) ? 'bg-indigo-900/30 border border-indigo-700/50' : 'bg-gray-800/50 hover:bg-gray-800'
+              }`}
+            >
+              {doc.status === 'ready' && (
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(doc.id)}
+                  onChange={() => toggleDoc(doc.id)}
+                  className="rounded border-gray-600 text-indigo-500 shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              )}
               <FileText size={12} className="text-gray-500 shrink-0" />
               <span className="flex-1 text-xs text-gray-300 truncate" title={doc.filename}>{doc.filename}</span>
               <span className="text-xs text-gray-600 shrink-0">{formatSize(doc.file_size)}</span>
               {STATUS_ICON[doc.status]}
-              <button onClick={() => deleteDocument(doc)} className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all">
+              <button
+                onClick={(e) => { e.stopPropagation(); deleteDocument(doc) }}
+                className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all"
+              >
                 <Trash2 size={12} />
               </button>
             </div>

@@ -92,12 +92,17 @@ async def chat_stream(
 
     async def event_stream():
         yield f"data: {{\"conversation_id\": \"{conversation.id}\"}}\n\n"
-        async for token in stream_chat_response(
-            db, conversation, body.message, body.document_ids,
-            provider_name=provider_name, llm_config=llm_config,
-        ):
-            escaped = token.replace("\n", "\\n")
-            yield f"data: {escaped}\n\n"
+        try:
+            async for token in stream_chat_response(
+                db, conversation, body.message, body.document_ids,
+                provider_name=provider_name, llm_config=llm_config,
+            ):
+                escaped = token.replace("\n", "\\n")
+                yield f"data: {escaped}\n\n"
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield f"data: [ERROR] {str(e)[:500]}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
