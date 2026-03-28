@@ -23,6 +23,7 @@ class Document(Base):
     file_type: Mapped[str] = mapped_column(String(50))
     file_size: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), default="pending")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     strategy: Mapped[str | None] = mapped_column(String(20), nullable=True)
     full_text: Mapped[str | None] = mapped_column(Text, nullable=True)

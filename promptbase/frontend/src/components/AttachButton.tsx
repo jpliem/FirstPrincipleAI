@@ -100,10 +100,10 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
     }
   }
 
-  const STATUS_ICON: Record<string, React.ReactNode> = {
-    pending: <Loader2 size={12} className="animate-spin text-yellow-400 shrink-0" />,
-    processing: <Loader2 size={12} className="animate-spin text-blue-400 shrink-0" />,
-    ready: <CheckCircle2 size={12} className="text-green-400 shrink-0" />,
+  const statusIndicator = (doc: Document) => {
+    if (doc.status === 'ready') return <CheckCircle2 size={12} className="text-green-400 shrink-0" />
+    if (doc.status === 'failed') return <span className="text-red-400 text-[10px]">failed</span>
+    return <span className="text-indigo-400 text-[10px] tabular-nums">{doc.progress ?? 0}%</span>
   }
 
   return (
@@ -183,7 +183,7 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
                     >
                       <FileText size={12} className="text-gray-500 shrink-0" />
                       <span className="truncate flex-1 text-left">{doc.filename}</span>
-                      {STATUS_ICON[doc.status]}
+                      {statusIndicator(doc)}
                     </button>
                   )
                 })

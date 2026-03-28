@@ -10,6 +10,7 @@ class DocumentResponse(BaseModel):
     file_type: str
     file_size: int
     status: str
+    progress: int = 0
     strategy: str | None
     token_count: int
     conversation_id: uuid.UUID | None = None

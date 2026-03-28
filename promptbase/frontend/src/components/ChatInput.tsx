@@ -95,6 +95,7 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, t
     id: d.id,
     filename: d.filename,
     status: d.status,
+    progress: d.progress ?? 0,
     isLibrary: !d.conversation_id,
   }))
 

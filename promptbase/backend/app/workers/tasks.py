@@ -35,25 +35,45 @@ def process_document(self, document_id: str):
         if not doc:
             return
 
+        # Stage 1: Start processing (10%)
         doc.status = "processing"
+        doc.progress = 10
         session.commit()
 
+        # Stage 2: Parse document (40%)
         text = parse_document(doc.file_path, doc.file_type)
+        doc.progress = 40
+        session.commit()
 
+        # Stage 3: Count tokens (50%)
         token_count = count_tokens_approx(text)
         doc.token_count = token_count
+        doc.progress = 50
+        session.commit()
 
         if token_count <= settings.rag_threshold_tokens:
+            # Stage 4a: Full inject — store text (90%)
             doc.strategy = "full_inject"
             doc.full_text = text
+            doc.progress = 90
+            session.commit()
+
+            # Done (100%)
             doc.status = "ready"
+            doc.progress = 100
             session.commit()
             return
 
+        # Stage 4b: RAG — chunk text (60%)
         doc.strategy = "rag"
+        doc.progress = 60
+        session.commit()
+
         chunks = chunk_text(text, chunk_size=settings.default_chunk_size * 4, overlap=settings.default_chunk_overlap * 4)
         token_counts = count_chunk_tokens(chunks)
 
+        # Stage 5: Store chunks (60-90%)
+        total_chunks = len(chunks)
         for i, (chunk_text_content, tokens) in enumerate(zip(chunks, token_counts)):
             chunk = DocumentChunk(
                 document_id=doc.id,
@@ -64,7 +84,14 @@ def process_document(self, document_id: str):
             )
             session.add(chunk)
 
+            # Update progress proportionally through chunk processing
+            chunk_progress = 60 + int(30 * (i + 1) / max(total_chunks, 1))
+            doc.progress = chunk_progress
+            session.commit()
+
+        # Done (100%)
         doc.status = "ready"
+        doc.progress = 100
         session.commit()
 
     except Exception as e:
@@ -73,6 +100,7 @@ def process_document(self, document_id: str):
             doc = session.query(Document).filter(Document.id == uuid.UUID(document_id)).first()
             if doc:
                 doc.status = "failed"
+                doc.progress = 0
                 doc.error_message = str(e)[:1000]
                 session.commit()
         except Exception:

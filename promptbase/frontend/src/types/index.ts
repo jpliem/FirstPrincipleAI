@@ -45,6 +45,7 @@ export interface Document {
   file_type: string
   file_size: number
   status: 'pending' | 'processing' | 'ready' | 'failed'
+  progress: number
   strategy: 'full_inject' | 'rag' | null
   token_count: number
   conversation_id?: string | null

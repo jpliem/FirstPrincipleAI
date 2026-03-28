@@ -1,9 +1,10 @@
-import { X, Loader2, CheckCircle2, FileText } from 'lucide-react'
+import { X, CheckCircle2, FileText } from 'lucide-react'
 
 interface AttachedDoc {
   id: string
   filename: string
   status: string
+  progress: number
   isLibrary: boolean
 }
 
@@ -12,6 +13,21 @@ interface Props {
   queuedFiles: File[]
   onRemove: (docId: string, isLibrary: boolean) => void
   onRemoveQueued: (index: number) => void
+}
+
+function ProgressRing({ progress }: { progress: number }) {
+  const size = 14
+  const stroke = 2
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (progress / 100) * circumference
+
+  return (
+    <svg width={size} height={size} className="shrink-0 -rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-gray-700" />
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className="text-indigo-400 transition-all duration-300" />
+    </svg>
+  )
 }
 
 export default function AttachedDocs({ docs, queuedFiles, onRemove, onRemoveQueued }: Props) {
@@ -26,7 +42,7 @@ export default function AttachedDocs({ docs, queuedFiles, onRemove, onRemoveQueu
         >
           <FileText size={10} className="shrink-0" />
           <span className="truncate max-w-[120px]">{file.name}</span>
-          <Loader2 size={10} className="animate-spin text-yellow-400 shrink-0" />
+          <span className="text-yellow-400 text-[10px]">queued</span>
           <button
             type="button"
             onClick={() => onRemoveQueued(idx)}
@@ -45,8 +61,13 @@ export default function AttachedDocs({ docs, queuedFiles, onRemove, onRemoveQueu
           <span className="truncate max-w-[120px]">{doc.filename}</span>
           {doc.status === 'ready' ? (
             <CheckCircle2 size={10} className="text-green-400 shrink-0" />
+          ) : doc.status === 'failed' ? (
+            <span className="text-red-400 text-[10px]">failed</span>
           ) : (
-            <Loader2 size={10} className="animate-spin text-blue-400 shrink-0" />
+            <>
+              <ProgressRing progress={doc.progress} />
+              <span className="text-indigo-400 text-[10px] tabular-nums">{doc.progress}%</span>
+            </>
           )}
           <button
             type="button"
