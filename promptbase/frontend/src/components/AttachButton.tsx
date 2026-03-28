@@ -37,7 +37,6 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
           })
         }
         queryClient.invalidateQueries({ queryKey: ['library-docs', teamId] })
-        // Auto-open library view to show the upload
         setOpen(true)
         setShowLibrary(true)
       } catch (err) {
@@ -79,9 +78,17 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
   }
 
   const handleAttachFromLibrary = async (doc: Document) => {
-    if (!conversationId || doc.status !== 'ready') return
+    if (doc.status !== 'ready') return
     setOpen(false)
     setShowLibrary(false)
+
+    if (!conversationId) {
+      // No conversation yet — just add the doc to attached list
+      // It will be linked via API when the conversation is created
+      onDocAttached(doc)
+      return
+    }
+
     try {
       await api.post(`/documents/conversation/${conversationId}/attach`, {
         document_id: doc.id,
@@ -162,18 +169,17 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
               ) : (
                 libraryDocs.map((doc) => {
                   const isReady = doc.status === 'ready'
-                  const canAttach = isReady && !!conversationId
                   return (
                     <button
                       key={doc.id}
-                      onClick={() => canAttach && handleAttachFromLibrary(doc)}
-                      disabled={!canAttach}
+                      onClick={() => isReady && handleAttachFromLibrary(doc)}
+                      disabled={!isReady}
                       className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
-                        canAttach
+                        isReady
                           ? 'text-gray-300 hover:bg-gray-700 cursor-pointer'
                           : 'text-gray-500 cursor-default'
                       }`}
-                      title={!conversationId ? 'Send a message first to attach docs' : !isReady ? 'Still processing...' : doc.filename}
+                      title={!isReady ? 'Still processing...' : doc.filename}
                     >
                       <FileText size={12} className="text-gray-500 shrink-0" />
                       <span className="truncate flex-1 text-left">{doc.filename}</span>
