@@ -84,7 +84,6 @@ async def list_library_documents(
         select(Document).where(
             Document.team_id == team_id,
             Document.conversation_id.is_(None),
-            Document.status == "ready",
         ).order_by(Document.created_at.desc())
     )
     return DocumentListResponse(documents=result.scalars().all())

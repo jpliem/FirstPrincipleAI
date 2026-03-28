@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Paperclip, Upload, Library, Loader2, FileText, FolderUp } from 'lucide-react'
+import { Paperclip, Upload, Library, Loader2, FileText, FolderUp, CheckCircle2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useLibraryDocs } from '../hooks/useDocumentStatus'
@@ -24,10 +24,9 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return
-    setOpen(false)
 
     if (uploadTarget === 'library') {
-      // Upload to team library (no conversation_id)
+      setOpen(false)
       setUploading(true)
       try {
         for (const file of Array.from(files)) {
@@ -38,6 +37,9 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
           })
         }
         queryClient.invalidateQueries({ queryKey: ['library-docs', teamId] })
+        // Auto-open library view to show the upload
+        setOpen(true)
+        setShowLibrary(true)
       } catch (err) {
         console.error('Upload failed:', err)
       } finally {
@@ -46,6 +48,8 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
       }
       return
     }
+
+    setOpen(false)
 
     if (!conversationId) {
       for (const file of Array.from(files)) {
@@ -75,7 +79,7 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
   }
 
   const handleAttachFromLibrary = async (doc: Document) => {
-    if (!conversationId) return
+    if (!conversationId || doc.status !== 'ready') return
     setOpen(false)
     setShowLibrary(false)
     try {
@@ -87,6 +91,12 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
     } catch (err) {
       console.error('Attach failed:', err)
     }
+  }
+
+  const STATUS_ICON: Record<string, React.ReactNode> = {
+    pending: <Loader2 size={12} className="animate-spin text-yellow-400 shrink-0" />,
+    processing: <Loader2 size={12} className="animate-spin text-blue-400 shrink-0" />,
+    ready: <CheckCircle2 size={12} className="text-green-400 shrink-0" />,
   }
 
   return (
@@ -111,7 +121,7 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
       </button>
 
       {open && (
-        <div className="absolute bottom-12 left-0 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 overflow-hidden">
+        <div className="absolute bottom-12 left-0 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 overflow-hidden">
           {!showLibrary ? (
             <>
               <button
@@ -122,43 +132,55 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
                 Upload to chat
               </button>
               <button
-                onClick={() => { setUploadTarget('library'); fileInputRef.current?.click(); setOpen(false) }}
+                onClick={() => { setUploadTarget('library'); fileInputRef.current?.click() }}
                 className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors border-t border-gray-700"
               >
                 <FolderUp size={14} />
                 Upload to library
               </button>
-              {conversationId && (
-                <button
-                  onClick={() => setShowLibrary(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors border-t border-gray-700"
-                >
-                  <Library size={14} />
-                  From library
-                </button>
-              )}
+              <button
+                onClick={() => setShowLibrary(true)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors border-t border-gray-700"
+              >
+                <Library size={14} />
+                From library {libraryDocs.length > 0 && <span className="text-gray-600 text-xs">({libraryDocs.length})</span>}
+              </button>
             </>
           ) : (
-            <div className="max-h-48 overflow-y-auto">
-              <button
-                onClick={() => setShowLibrary(false)}
-                className="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-700 border-b border-gray-700"
-              >
-                ← Back
-              </button>
+            <div className="max-h-64 overflow-y-auto">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
+                <button
+                  onClick={() => setShowLibrary(false)}
+                  className="text-xs text-gray-500 hover:text-gray-300"
+                >
+                  ← Back
+                </button>
+                <span className="text-xs text-gray-600">Team Library</span>
+              </div>
               {libraryDocs.length === 0 ? (
-                <p className="px-3 py-3 text-xs text-gray-500">No library documents</p>
+                <p className="px-3 py-4 text-xs text-gray-500 text-center">No library documents yet.<br />Upload one with "Upload to library".</p>
               ) : (
-                libraryDocs.map((doc) => (
-                  <button
-                    key={doc.id}
-                    onClick={() => handleAttachFromLibrary(doc)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
-                  >
-                    <FileText size={12} className="text-gray-500 shrink-0" />
-                    <span className="truncate">{doc.filename}</span>
-                  </button>
-                ))
+                libraryDocs.map((doc) => {
+                  const isReady = doc.status === 'ready'
+                  const canAttach = isReady && !!conversationId
+                  return (
+                    <button
+                      key={doc.id}
+                      onClick={() => canAttach && handleAttachFromLibrary(doc)}
+                      disabled={!canAttach}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                        canAttach
+                          ? 'text-gray-300 hover:bg-gray-700 cursor-pointer'
+                          : 'text-gray-500 cursor-default'
+                      }`}
+                      title={!conversationId ? 'Send a message first to attach docs' : !isReady ? 'Still processing...' : doc.filename}
+                    >
+                      <FileText size={12} className="text-gray-500 shrink-0" />
+                      <span className="truncate flex-1 text-left">{doc.filename}</span>
+                      {STATUS_ICON[doc.status]}
+                    </button>
+                  )
+                })
               )}
             </div>
           )}

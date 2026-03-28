@@ -26,6 +26,13 @@ export function useLibraryDocs(teamId: string) {
       const res = await api.get(`/documents/${teamId}/library`)
       return res.data.documents
     },
+    refetchInterval: (query) => {
+      const docs = query.state.data ?? []
+      const hasActive = docs.some(
+        (d) => d.status === 'pending' || d.status === 'processing'
+      )
+      return hasActive ? 3_000 : false
+    },
   })
 }
 
