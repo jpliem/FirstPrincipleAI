@@ -28,6 +28,7 @@ class OllamaProvider(LLMProvider):
                         "options": {
                             "temperature": config.temperature,
                             "num_predict": config.max_tokens,
+                            "num_ctx": config.max_context or 32768,
                         },
                     },
                 ) as response:

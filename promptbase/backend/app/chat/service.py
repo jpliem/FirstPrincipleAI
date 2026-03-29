@@ -125,6 +125,9 @@ async def prepare_chat(
     else:
         context_limit = 128000
 
+    # Tell the provider what context size to request (important for Ollama)
+    llm_config.max_context = context_limit
+
     if basic_mode:
         # Skip prompt pack compilation — plain chat
         doc_context = ""

@@ -10,6 +10,7 @@ class LLMConfig:
     base_url: str = ""
     temperature: float = 0.7
     max_tokens: int = 4096
+    max_context: int = 0  # 0 = use provider default
 
 
 class LLMProvider(ABC):
