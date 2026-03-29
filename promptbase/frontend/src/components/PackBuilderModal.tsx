@@ -78,10 +78,10 @@ export default function PackBuilderModal({ sourcePackId, sourcePackName, onClose
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
-          const data = line.slice(6).trim()
-          if (data === '[DONE]') break
-          if (data.startsWith('[ERROR]')) {
-            fullResponse += `\n\nError: ${data.slice(8)}`
+          const data = line.slice(6)
+          if (data.trim() === '[DONE]') break
+          if (data.trim().startsWith('[ERROR]')) {
+            fullResponse += `\n\nError: ${data.trim().slice(8)}`
             break
           }
           const decoded = data.replace(/\\n/g, '\n')
