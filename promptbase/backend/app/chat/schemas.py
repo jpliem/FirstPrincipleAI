@@ -10,6 +10,7 @@ class ChatRequest(BaseModel):
     team_id: uuid.UUID
     document_ids: list[uuid.UUID] = []
     mode: str | None = None
+    basic_mode: bool = False
 
 
 class MessageResponse(BaseModel):

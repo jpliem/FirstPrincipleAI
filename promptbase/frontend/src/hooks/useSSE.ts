@@ -35,6 +35,7 @@ export function useSSE() {
         conversation_id?: string | null
         document_ids?: string[]
         mode?: string | null
+        basic_mode?: boolean
       },
       opts: SSEOptions
     ) => {

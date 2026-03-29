@@ -99,6 +99,7 @@ async def prepare_chat(
     document_ids: list[uuid.UUID],
     provider_name: str,
     llm_config: LLMConfig,
+    basic_mode: bool = False,
 ) -> dict:
     """Prepare the chat: save user message, compile prompt, return metadata + ready state."""
     user_msg = Message(
@@ -123,6 +124,41 @@ async def prepare_chat(
         context_limit = provider.max_context_tokens(llm_config.model)
     else:
         context_limit = 128000
+
+    if basic_mode:
+        # Skip prompt pack compilation — plain chat
+        doc_context = ""
+        if document_ids:
+            doc_context = await retrieve_document_context(db, document_ids, query_embedding=None)
+
+        system_prompt = "You are a helpful assistant."
+        if doc_context:
+            system_prompt += f"\n\n## Reference Documents\n\n{doc_context}"
+
+        history = await load_conversation_history(db, conversation.id, max_tokens=8000)
+        history_tokens = sum(count_tokens_approx(m["content"]) for m in history)
+        prompt_tokens = count_tokens_approx(system_prompt)
+        used_tokens = prompt_tokens + history_tokens + count_tokens_approx(user_message)
+        dynamic_max = max(1024, context_limit - used_tokens - 256)
+        llm_config.max_tokens = min(llm_config.max_tokens, dynamic_max)
+
+        return {
+            "provider": provider,
+            "compiled": {
+                "system_prompt": system_prompt,
+                "total_tokens": prompt_tokens,
+                "modules_loaded": [],
+                "modules_by_layer": {},
+                "domains_matched": [],
+                "mode": "basic",
+                "trimmed": [],
+                "budget_remaining": context_limit - used_tokens,
+                "core_mode": None,
+            },
+            "history": history,
+            "context_limit": context_limit,
+            "llm_config": llm_config,
+        }
 
     if pack_data:
         compiler = PromptCompiler(

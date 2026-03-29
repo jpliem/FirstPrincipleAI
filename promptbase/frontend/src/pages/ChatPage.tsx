@@ -9,6 +9,7 @@ export default function ChatPage() {
   const [activeTeam, setActiveTeam] = useState<Team | null>(null)
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
   const [activeMode, setActiveMode] = useState<TaskMode | null>(null)
+  const [basicMode, setBasicMode] = useState(false)
 
   const { data: teams = [] } = useQuery<Team[]>({
     queryKey: ['teams'],
@@ -21,7 +22,7 @@ export default function ChatPage() {
   })
 
   return (
-    <div className="flex h-screen bg-gray-950 text-gray-100 overflow-hidden">
+    <div className="flex h-screen bg-white dark:bg-gray-950 text-gray-800 dark:text-gray-100 overflow-hidden">
       <ChatSidebar
         teams={teams}
         activeTeam={activeTeam}
@@ -37,6 +38,8 @@ export default function ChatPage() {
           setActiveMode(null)
         }}
         onModeChange={setActiveMode}
+        basicMode={basicMode}
+        onBasicModeChange={setBasicMode}
       />
       <main className="flex-1 flex flex-col min-w-0">
         {activeTeam ? (
@@ -45,6 +48,7 @@ export default function ChatPage() {
             conversation={activeConversation}
             onConversationCreated={setActiveConversation}
             activeMode={activeMode}
+            basicMode={basicMode}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">

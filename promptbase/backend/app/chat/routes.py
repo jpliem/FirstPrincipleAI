@@ -93,7 +93,7 @@ async def chat_stream(
     # Prepare: compile prompt, detect mode, calculate budget
     prepared = await prepare_chat(
         db, conversation, body.message, body.document_ids,
-        provider_name, llm_config,
+        provider_name, llm_config, basic_mode=body.basic_mode,
     )
     compiled = prepared["compiled"]
 

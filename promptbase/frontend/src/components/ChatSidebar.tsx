@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import type { Team, Conversation, TaskMode } from '../types'
 import ConversationList from './ConversationList'
 import ModeSelector from './ModeSelector'
+import ThemeToggle from './ThemeToggle'
 
 interface Props {
   teams: Team[]
@@ -13,17 +14,19 @@ interface Props {
   onSelectConversation: (conv: Conversation) => void
   onNewConversation: () => void
   onModeChange: (mode: TaskMode | null) => void
+  basicMode: boolean
+  onBasicModeChange: (basic: boolean) => void
 }
 
 export default function ChatSidebar({
   teams, activeTeam, onSelectTeam,
   activeConversation, onSelectConversation, onNewConversation,
-  onModeChange,
+  onModeChange, basicMode, onBasicModeChange,
 }: Props) {
   const { user, logout } = useAuth()
 
   return (
-    <aside className="w-72 flex flex-col bg-gray-900 border-r border-gray-800 shrink-0">
+    <aside className="w-72 flex flex-col bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shrink-0">
       {/* Team selector */}
       <div className="p-4 border-b border-gray-800">
         <select
@@ -40,8 +43,8 @@ export default function ChatSidebar({
         </select>
       </div>
 
-      {/* New chat button */}
-      <div className="p-3 border-b border-gray-800">
+      {/* New chat + mode toggle */}
+      <div className="p-3 border-b border-gray-800 space-y-2">
         <button
           onClick={onNewConversation}
           className="w-full flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition-colors"
@@ -49,10 +52,31 @@ export default function ChatSidebar({
           <PlusCircle size={16} />
           New Chat
         </button>
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-gray-500">Chat mode</span>
+          <div className="flex bg-gray-800 rounded-lg p-0.5">
+            <button
+              onClick={() => onBasicModeChange(true)}
+              className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                basicMode ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              Basic
+            </button>
+            <button
+              onClick={() => onBasicModeChange(false)}
+              className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                !basicMode ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              Advanced
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Mode selector */}
-      {activeTeam && (
+      {/* Mode selector — only in advanced mode */}
+      {activeTeam && !basicMode && (
         <div className="px-3 py-2 border-b border-gray-800">
           <ModeSelector teamId={activeTeam.id} onModeChange={onModeChange} />
         </div>

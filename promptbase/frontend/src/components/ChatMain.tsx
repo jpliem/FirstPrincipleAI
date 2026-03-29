@@ -13,9 +13,10 @@ interface Props {
   conversation: Conversation | null
   onConversationCreated: (conv: Conversation) => void
   activeMode: TaskMode | null
+  basicMode: boolean
 }
 
-export default function ChatMain({ team, conversation, onConversationCreated, activeMode }: Props) {
+export default function ChatMain({ team, conversation, onConversationCreated, activeMode, basicMode }: Props) {
   const queryClient = useQueryClient()
   const { startStream, cancel } = useSSE()
   const [isStreaming, setIsStreaming] = useState(false)
@@ -80,6 +81,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         conversation_id: conversationId,
         document_ids: docIds ?? [],
         mode: activeMode?.name ?? null,
+        basic_mode: basicMode,
       },
       {
         onMeta: (meta) => {
@@ -179,20 +181,28 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
       <div className="flex-1 overflow-y-auto divide-y divide-gray-800/50">
         {messages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
-            <p className="text-lg font-medium text-gray-400">Start a conversation</p>
-            <p className="text-sm">Type a message below. Mode auto-detects from your message.</p>
-            <p className="text-xs text-gray-600">analysis · solution design · implementation · tender response · architecture review · business process</p>
+            <p className="text-lg font-medium text-gray-400">
+              {basicMode ? 'Basic Chat' : 'Start a conversation'}
+            </p>
+            <p className="text-sm">
+              {basicMode
+                ? 'Plain chat — no prompt pack, just you and the model.'
+                : 'Type a message below. Mode auto-detects from your message.'}
+            </p>
+            {!basicMode && (
+              <p className="text-xs text-gray-600">analysis · solution design · implementation · tender response · architecture review · business process</p>
+            )}
           </div>
         )}
         {messages.map((msg, idx) => (
           <div key={msg.id}>
             <ChatMessage message={msg} />
-            {msg.role === 'user' && idx === messages.length - 1 && lastMeta && !isStreaming && (
+            {!basicMode && msg.role === 'user' && idx === messages.length - 1 && lastMeta && !isStreaming && (
               <ProcessTimeline meta={lastMeta} />
             )}
           </div>
         ))}
-        {isStreaming && lastMeta && (
+        {!basicMode && isStreaming && lastMeta && (
           <ProcessTimeline meta={lastMeta} />
         )}
         {isStreaming && (streamBuffer || thinkingBuffer) && (
