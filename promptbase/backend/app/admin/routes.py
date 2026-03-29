@@ -64,6 +64,47 @@ async def create_pack(
     )
 
 
+@router.delete("/packs/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_pack(
+    pack_id: uuid.UUID,
+    force: bool = False,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    pack_result = await db.execute(select(PromptPack).where(PromptPack.id == pack_id))
+    pack = pack_result.scalar_one_or_none()
+    if not pack:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    # Check if assigned to a team
+    team_result = await db.execute(select(Team).where(Team.pack_id == pack_id))
+    assigned_team = team_result.scalar_one_or_none()
+    if assigned_team and not force:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Pack is assigned to team '{assigned_team.name}'. Use force=true to delete anyway.",
+        )
+
+    if assigned_team:
+        assigned_team.pack_id = None
+        await db.flush()
+
+    # Delete modes and modules
+    modes = (await db.execute(select(TaskMode).where(TaskMode.pack_id == pack_id))).scalars().all()
+    for mode in modes:
+        await db.delete(mode)
+
+    modules = (await db.execute(select(PromptModule).where(PromptModule.pack_id == pack_id))).scalars().all()
+    for module in modules:
+        await db.delete(module)
+
+    await db.delete(pack)
+    await db.commit()
+
+
 @router.post("/packs/import")
 async def import_pack(
     file: UploadFile, name: str = "Imported Pack",
