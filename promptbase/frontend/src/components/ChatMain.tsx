@@ -151,22 +151,28 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-gray-800 bg-gray-950 shrink-0">
+      <header className="flex items-center justify-between px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
         <div>
-          <h1 className="text-sm font-semibold text-white">
+          <h1 className="text-sm font-semibold text-gray-900 dark:text-white">
             {conversation?.title ?? 'New Conversation'}
           </h1>
           <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
             <span>{team.name}</span>
+            {lastMeta?.model && (
+              <>
+                <span className="text-gray-400 dark:text-gray-700">&middot;</span>
+                <span className="text-emerald-600 dark:text-emerald-400">{lastMeta.model}</span>
+              </>
+            )}
             {lastMeta?.mode_detected && (
               <>
-                <span className="text-gray-700">&middot;</span>
+                <span className="text-gray-400 dark:text-gray-700">&middot;</span>
                 <span className="text-indigo-400">{lastMeta.mode_detected} mode</span>
               </>
             )}
             {activeMode && !lastMeta?.mode_detected && (
               <>
-                <span className="text-gray-700">&middot;</span>
+                <span className="text-gray-400 dark:text-gray-700">&middot;</span>
                 <span className="text-indigo-400">{activeMode.name} mode</span>
               </>
             )}
@@ -178,10 +184,10 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto divide-y divide-gray-800/50">
+      <div className="flex-1 overflow-y-auto divide-y divide-gray-200/50 dark:divide-gray-800/50">
         {messages.length === 0 && !isStreaming && (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
-            <p className="text-lg font-medium text-gray-400">
+          <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-500 gap-3">
+            <p className="text-lg font-medium text-gray-500 dark:text-gray-400">
               {basicMode ? 'Basic Chat' : 'Start a conversation'}
             </p>
             <p className="text-sm">
@@ -190,7 +196,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
                 : 'Type a message below. Mode auto-detects from your message.'}
             </p>
             {!basicMode && (
-              <p className="text-xs text-gray-600">analysis · solution design · implementation · tender response · architecture review · business process</p>
+              <p className="text-xs text-gray-400 dark:text-gray-600">analysis · solution design · implementation · tender response · architecture review · business process</p>
             )}
           </div>
         )}
