@@ -214,6 +214,25 @@ async def list_conversations(
     ])
 
 
+@router.delete("/conversations/{team_id}/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(
+    team_id: uuid.UUID, conversation_id: uuid.UUID,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.team_id == team_id,
+            Conversation.user_id == user.id,
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await db.delete(conv)
+    await db.commit()
+
+
 @router.get("/conversations/{team_id}/{conversation_id}/messages", response_model=list[MessageResponse])
 async def get_messages(
     team_id: uuid.UUID, conversation_id: uuid.UUID,
