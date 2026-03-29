@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.auth.service import get_user_team_role
-from app.chat.models import Conversation, Message
+from app.chat.models import Conversation, ConversationDocument, Message
 from app.chat.schemas import (
     ChatRequest,
     ConversationListResponse,
@@ -229,6 +229,12 @@ async def delete_conversation(
     conv = result.scalar_one_or_none()
     if not conv:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    # Delete junction rows that have no cascade at DB level
+    from sqlalchemy import delete as sa_delete
+    await db.execute(
+        sa_delete(ConversationDocument).where(ConversationDocument.conversation_id == conversation_id)
+    )
     await db.delete(conv)
     await db.commit()
 
