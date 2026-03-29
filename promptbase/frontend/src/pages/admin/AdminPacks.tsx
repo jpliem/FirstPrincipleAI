@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, Upload, Download, Sliders, Loader2, Sparkles, Check } from 'lucide-react'
+import { Plus, Upload, Download, Sliders, Loader2, Sparkles, Check, Trash2 } from 'lucide-react'
 import { api, getAccessToken } from '../../api/client'
 import type { PromptPack } from '../../types'
+import PackBuilderModal from '../../components/PackBuilderModal'
 
 export default function AdminPacks() {
   const qc = useQueryClient()
@@ -11,6 +12,9 @@ export default function AdminPacks() {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
+  const [builderOpen, setBuilderOpen] = useState(false)
+  const [builderSourceId, setBuilderSourceId] = useState<string | null>(null)
+  const [builderSourceName, setBuilderSourceName] = useState<string | null>(null)
 
   const { data: packs = [], isLoading } = useQuery<PromptPack[]>({
     queryKey: ['admin', 'packs'],
@@ -36,6 +40,16 @@ export default function AdminPacks() {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     qc.invalidateQueries({ queryKey: ['admin', 'packs'] })
+  }
+
+  const deletePack = async (packId: string, packName: string) => {
+    if (!confirm(`Delete "${packName}"? This cannot be undone.`)) return
+    try {
+      await api.delete(`/admin/packs/${packId}?force=true`)
+      qc.invalidateQueries({ queryKey: ['admin', 'packs'] })
+    } catch (err: any) {
+      alert(err.response?.data?.detail ?? 'Failed to delete pack')
+    }
   }
 
   const exportPack = async (pack: PromptPack) => {
@@ -75,6 +89,17 @@ export default function AdminPacks() {
           >
             <Upload size={16} />
             Import ZIP
+          </button>
+          <button
+            onClick={() => {
+              setBuilderSourceId(null)
+              setBuilderSourceName(null)
+              setBuilderOpen(true)
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Sparkles size={16} />
+            Create with AI
           </button>
           <button
             onClick={() => setCreating(true)}
@@ -162,6 +187,25 @@ export default function AdminPacks() {
                   >
                     <Download size={16} />
                   </button>
+                  <button
+                    onClick={() => {
+                      setBuilderSourceId(pack.id)
+                      setBuilderSourceName(pack.name)
+                      setBuilderOpen(true)
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-amber-400 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+                    title="Expand with AI"
+                  >
+                    <Sparkles size={14} />
+                    Expand
+                  </button>
+                  <button
+                    onClick={() => deletePack(pack.id, pack.name)}
+                    className="p-1.5 text-gray-400 hover:text-red-400 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+                    title="Delete pack"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
               {/* AI Analyzer + Module editor */}
@@ -170,6 +214,14 @@ export default function AdminPacks() {
             </div>
           ))}
         </div>
+      )}
+      {builderOpen && (
+        <PackBuilderModal
+          sourcePackId={builderSourceId}
+          sourcePackName={builderSourceName}
+          onClose={() => setBuilderOpen(false)}
+          onCreated={() => qc.invalidateQueries({ queryKey: ['admin', 'packs'] })}
+        />
       )}
     </div>
   )
