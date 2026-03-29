@@ -93,7 +93,7 @@ async def _load_source_modules(db: AsyncSession, pack_id: uuid.UUID) -> str:
 
     parts = []
     for m in modules:
-        parts.append(f"### Module: {m.title}\n- Layer: {m.layer}\n- Tags: {json.dumps(m.tags or [])}\n- Priority: {m.priority}\n\n{m.content[:500]}{'...' if len(m.content) > 500 else ''}")
+        parts.append(f"### Module: {m.title}\n- Layer: {m.layer}\n- Tags: {json.dumps(m.tags or [])}\n- Priority: {m.priority}\n\n{m.content}")
     return "\n\n---\n\n".join(parts)
 
 
@@ -115,19 +115,22 @@ Keep responses concise — one question per message."""
 
 INTERVIEW_WITH_SOURCE_PROMPT = """You are a prompt engineering expert reviewing an existing prompt pack and helping the admin improve it.
 
-The current pack contains these modules:
+You MUST read and reference the existing modules below carefully. Your questions should be specific to what you see — mention module names, point out specific gaps, reference actual content.
+
+## Current Pack Modules
 
 {source_modules}
 
-Your job is to ask ONE question at a time to identify:
-- Gaps in coverage (domains, workflows, or scenarios not addressed)
-- Modules that could be improved or updated
-- New capabilities the organization needs
-- Changes in processes or standards since the pack was created
+## Your Job
 
-Ask focused, specific questions based on what you see in the existing modules. Do not ask generic questions.
+Ask ONE question at a time. Each question must demonstrate you've read the modules:
+- Reference specific modules by name ("I see your '06_DIGITAL_THREAD' module covers traceability, but it doesn't mention...")
+- Identify concrete gaps ("You have IoT and business app domains but nothing about cybersecurity — is that intentional?")
+- Suggest specific improvements ("The 'OUTPUT_FORMAT' module only specifies markdown — do you also need structured data output like JSON or CSV?")
+- Ask about outdated content ("The 'PROJECT_OVERVIEW' references a specific organizational structure — has this changed?")
 
-Do NOT generate modules or output JSON. Only ask questions and acknowledge answers.
+Do NOT ask broad generic questions like "what domains do you work in" — the modules already tell you that.
+Do NOT generate modules or output JSON. Only ask targeted questions and acknowledge answers.
 
 Keep responses concise — one question per message."""
 

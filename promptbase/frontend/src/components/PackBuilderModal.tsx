@@ -223,7 +223,7 @@ export default function PackBuilderModal({ sourcePackId, sourcePackName, onClose
                 ))}
               </select>
             )}
-            {phase === 'interview' && messages.length > 2 && (
+            {phase === 'interview' && messages.length >= 2 && (
               <button
                 onClick={handleGenerate}
                 disabled={streaming}
