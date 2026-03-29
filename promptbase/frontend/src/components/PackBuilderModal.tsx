@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { X, Sparkles, Send, Loader2 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { getAccessToken } from '../api/client'
 import { api } from '../api/client'
 import ChatMessage from './ChatMessage'
@@ -26,13 +27,41 @@ export default function PackBuilderModal({ sourcePackId, sourcePackName, onClose
   const [generatedModules, setGeneratedModules] = useState<any[]>([])
   const [packName, setPackName] = useState(sourcePackName ? `${sourcePackName} (expanded)` : 'New Pack')
   const [applying, setApplying] = useState(false)
+  const [selectedModel, setSelectedModel] = useState<string>('')
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Fetch available providers and models
+  const { data: providers = [] } = useQuery<{ name: string; is_enabled: boolean }[]>({
+    queryKey: ['admin', 'providers'],
+    queryFn: async () => (await api.get('/admin/providers')).data,
+  })
+
+  const enabledProvider = providers.find((p) => p.is_enabled)
+
+  const { data: modelsData } = useQuery<{ models: string[] }>({
+    queryKey: ['admin', 'provider-models', enabledProvider?.name],
+    enabled: !!enabledProvider,
+    queryFn: async () => (await api.get(`/admin/providers/${enabledProvider!.name}/models`)).data,
+  })
+
+  const availableModels = modelsData?.models ?? []
+
+  // Set default model when models load
+  useEffect(() => {
+    if (availableModels.length > 0 && !selectedModel) {
+      setSelectedModel(availableModels[0])
+    }
+  }, [availableModels])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamBuffer])
 
+  // Start interview only after model is ready
+  const hasStarted = useRef(false)
   useEffect(() => {
+    if (hasStarted.current || !selectedModel) return
+    hasStarted.current = true
     sendToBuilder(
       '/api/admin/pack-builder/chat',
       [],
@@ -40,7 +69,7 @@ export default function PackBuilderModal({ sourcePackId, sourcePackName, onClose
         ? 'I want to expand my existing prompt pack. What should I consider improving?'
         : 'I want to create a new prompt pack for my organization. Let\'s start.'
     )
-  }, [])
+  }, [selectedModel])
 
   const sendToBuilder = async (url: string, prevMessages: ChatMsg[], userMessage: string) => {
     const allMessages = [...prevMessages, { role: 'user' as const, content: userMessage }]
@@ -61,6 +90,7 @@ export default function PackBuilderModal({ sourcePackId, sourcePackName, onClose
           messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
           source_pack_id: sourcePackId,
           pack_name: packName,
+          model: selectedModel || undefined,
         }),
       })
 
@@ -181,6 +211,18 @@ export default function PackBuilderModal({ sourcePackId, sourcePackName, onClose
             )}
           </div>
           <div className="flex items-center gap-2">
+            {availableModels.length > 0 && (
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                disabled={streaming}
+                className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-[200px]"
+              >
+                {availableModels.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            )}
             {phase === 'interview' && messages.length > 2 && (
               <button
                 onClick={handleGenerate}

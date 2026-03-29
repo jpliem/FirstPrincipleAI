@@ -22,12 +22,14 @@ router = APIRouter(prefix="/api/admin/pack-builder", tags=["pack-builder"])
 class BuilderChatRequest(BaseModel):
     messages: list[dict]
     source_pack_id: uuid.UUID | None = None
+    model: str | None = None
 
 
 class BuilderGenerateRequest(BaseModel):
     messages: list[dict]
     source_pack_id: uuid.UUID | None = None
     pack_name: str = "Generated Pack"
+    model: str | None = None
 
 
 class BuilderApplyRequest(BaseModel):
@@ -37,7 +39,7 @@ class BuilderApplyRequest(BaseModel):
     modules: list[dict]
 
 
-async def _get_llm(db: AsyncSession) -> tuple:
+async def _get_llm(db: AsyncSession, model_override: str | None = None) -> tuple:
     """Get first available LLM provider and config."""
     result = await db.execute(
         select(LLMProviderConfig).where(LLMProviderConfig.is_enabled == True)
@@ -50,7 +52,9 @@ async def _get_llm(db: AsyncSession) -> tuple:
     if not provider:
         raise HTTPException(status_code=400, detail=f"Provider '{prov.name}' not available")
 
-    if prov.name == "ollama":
+    if model_override:
+        model = model_override
+    elif prov.name == "ollama":
         import httpx
         base_url = (prov.base_url or "http://localhost:11434").rstrip("/")
         try:
@@ -199,7 +203,7 @@ async def builder_chat(
     if not user.is_super_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
-    provider, config = await _get_llm(db)
+    provider, config = await _get_llm(db, model_override=body.model)
 
     if body.source_pack_id:
         source_modules = await _load_source_modules(db, body.source_pack_id)
@@ -228,7 +232,7 @@ async def builder_generate(
     if not user.is_super_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
-    provider, config = await _get_llm(db)
+    provider, config = await _get_llm(db, model_override=body.model)
     config.max_tokens = 16384
     config.temperature = 0.5
 
