@@ -31,7 +31,7 @@ export default function ChatMessage({ message, isStreaming = false, thinkingCont
             hasTextStarted={hasTextStarted}
           />
         )}
-        <div className="prose dark:prose-invert prose-sm max-w-none">
+        <div className="prose dark:prose-invert prose-sm max-w-none overflow-x-hidden">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{

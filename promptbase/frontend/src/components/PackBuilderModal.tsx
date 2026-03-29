@@ -165,8 +165,8 @@ export default function PackBuilderModal({ sourcePackId, sourcePackName, onClose
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl w-[900px] h-[700px] max-h-[90vh] flex flex-col shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl w-full max-w-[900px] h-[700px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2">
@@ -208,7 +208,7 @@ export default function PackBuilderModal({ sourcePackId, sourcePackName, onClose
           />
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800/50">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden divide-y divide-gray-100 dark:divide-gray-800/50 min-w-0">
               {messages.map((msg, i) => (
                 <ChatMessage
                   key={i}
