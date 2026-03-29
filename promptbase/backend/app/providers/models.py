@@ -15,6 +15,7 @@ class LLMProviderConfig(Base):
     base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    default_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class TeamLLMConfig(Base):

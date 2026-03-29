@@ -54,6 +54,8 @@ async def _get_llm(db: AsyncSession, model_override: str | None = None) -> tuple
 
     if model_override:
         model = model_override
+    elif prov.default_model:
+        model = prov.default_model
     elif prov.name == "ollama":
         import httpx
         base_url = (prov.base_url or "http://localhost:11434").rstrip("/")

@@ -479,6 +479,7 @@ class LLMProviderConfigCreate(BaseModel):
     base_url: str | None = None
     api_key: str | None = None
     is_enabled: bool = True
+    default_model: str | None = None
 
 
 class LLMProviderConfigResponse(BaseModel):
@@ -487,6 +488,7 @@ class LLMProviderConfigResponse(BaseModel):
     base_url: str | None
     has_api_key: bool
     is_enabled: bool
+    default_model: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -523,6 +525,7 @@ async def list_providers(
         LLMProviderConfigResponse(
             id=p.id, name=p.name, base_url=p.base_url,
             has_api_key=bool(p.api_key_encrypted), is_enabled=p.is_enabled,
+            default_model=p.default_model,
         )
         for p in providers
     ]
@@ -544,12 +547,14 @@ async def create_or_update_provider(
         if body.api_key:
             provider.api_key_encrypted = body.api_key  # TODO: encrypt in production
         provider.is_enabled = body.is_enabled
+        provider.default_model = body.default_model
     else:
         provider = LLMProviderConfig(
             name=body.name,
             base_url=body.base_url,
             api_key_encrypted=body.api_key,  # TODO: encrypt in production
             is_enabled=body.is_enabled,
+            default_model=body.default_model,
         )
         db.add(provider)
 
@@ -575,11 +580,13 @@ async def update_provider(
     if body.api_key:
         provider.api_key_encrypted = body.api_key
     provider.is_enabled = body.is_enabled
+    provider.default_model = body.default_model
     await db.commit()
     await db.refresh(provider)
     return LLMProviderConfigResponse(
         id=provider.id, name=provider.name, base_url=provider.base_url,
         has_api_key=bool(provider.api_key_encrypted), is_enabled=provider.is_enabled,
+        default_model=provider.default_model,
     )
 
 

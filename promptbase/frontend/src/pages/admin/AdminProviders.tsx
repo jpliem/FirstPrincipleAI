@@ -9,6 +9,7 @@ interface Provider {
   base_url: string | null
   has_api_key: boolean
   is_enabled: boolean
+  default_model: string | null
 }
 
 const PROVIDER_OPTIONS = [
@@ -27,6 +28,7 @@ interface ProviderForm {
   base_url: string
   api_key: string
   is_enabled: boolean
+  default_model: string
 }
 
 const emptyForm = (name = 'anthropic'): ProviderForm => ({
@@ -34,6 +36,7 @@ const emptyForm = (name = 'anthropic'): ProviderForm => ({
   base_url: DEFAULT_URLS[name] ?? '',
   api_key: '',
   is_enabled: true,
+  default_model: '',
 })
 
 export default function AdminProviders() {
@@ -77,6 +80,7 @@ export default function AdminProviders() {
       base_url: provider.base_url ?? '',
       api_key: '', // don't pre-fill key
       is_enabled: provider.is_enabled,
+      default_model: provider.default_model ?? '',
     })
     setEditing(provider.id)
     setTestResult(null)
@@ -186,6 +190,30 @@ export default function AdminProviders() {
             />
           </div>
 
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Default Model</label>
+            {testResult && !testResult.error && testResult.models.length > 0 ? (
+              <select
+                value={form.default_model}
+                onChange={(e) => setForm({ ...form, default_model: e.target.value })}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+              >
+                <option value="">Auto-detect</option>
+                {testResult.models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={form.default_model}
+                onChange={(e) => setForm({ ...form, default_model: e.target.value })}
+                placeholder="Test connection to load models, or type manually"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600"
+              />
+            )}
+          </div>
+
           <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
             <input type="checkbox" checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} className="rounded" />
             Enabled
@@ -261,6 +289,7 @@ export default function AdminProviders() {
                 )}
               </div>
               {p.base_url && <p className="text-xs text-gray-500 mt-1">{p.base_url}</p>}
+              {p.default_model && <p className="text-xs text-emerald-500 mt-0.5">Default: {p.default_model}</p>}
             </div>
             <div className="flex gap-1">
               <button onClick={() => startEdit(p)} className="text-gray-500 hover:text-indigo-400 p-2" title="Edit">
