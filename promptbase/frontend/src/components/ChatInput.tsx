@@ -39,6 +39,30 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, o
     setAttachedDocs([])
   }, [conversationId])
 
+  // Poll processing docs until ready
+  useEffect(() => {
+    const pending = attachedDocs.filter((d) => d.status === 'pending' || d.status === 'processing')
+    if (pending.length === 0) return
+
+    const interval = setInterval(async () => {
+      const updated = await Promise.all(
+        attachedDocs.map(async (d) => {
+          if (d.status === 'ready' || d.status === 'failed') return d
+          try {
+            const base = teamId ? `/documents/${teamId}/${d.id}` : `/documents/personal/${d.id}`
+            const res = await api.get(base)
+            return res.data as Document
+          } catch {
+            return d
+          }
+        })
+      )
+      setAttachedDocs(updated)
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [attachedDocs, teamId])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const message = text.trim()

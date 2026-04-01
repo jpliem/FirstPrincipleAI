@@ -106,6 +106,25 @@ async def delete_personal_document(
     await db.commit()
 
 
+@router.get("/personal/{document_id}", response_model=DocumentResponse)
+async def get_personal_document(
+    document_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Document).where(
+            Document.id == document_id,
+            Document.team_id.is_(None),
+            Document.user_id == user.id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return doc
+
+
 @router.post("/{team_id}/upload", response_model=DocumentResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_document(
     team_id: uuid.UUID,
