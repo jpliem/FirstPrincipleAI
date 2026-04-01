@@ -93,6 +93,8 @@ async def chat_stream(
         db, conversation, body.message, body.document_ids,
         provider_name, llm_config, basic_mode=body.basic_mode,
     )
+    # Commit conversation + user message so other requests (file upload, message fetch) can see them
+    await db.commit()
     compiled = prepared["compiled"]
 
     import json as _json
