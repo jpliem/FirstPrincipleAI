@@ -132,7 +132,7 @@ async def prepare_chat(
         # Skip prompt pack compilation — plain chat
         doc_context = ""
         if document_ids:
-            doc_context = await retrieve_document_context(db, document_ids, query_embedding=None)
+            doc_context = await retrieve_document_context(db, document_ids, query_text=user_message)
 
         system_prompt = "You are a helpful assistant."
         if doc_context:
@@ -174,7 +174,7 @@ async def prepare_chat(
 
     doc_context = ""
     if document_ids:
-        doc_context = await retrieve_document_context(db, document_ids, query_embedding=None)
+        doc_context = await retrieve_document_context(db, document_ids, query_text=user_message)
 
     history = await load_conversation_history(db, conversation.id, max_tokens=8000)
 
