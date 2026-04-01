@@ -92,6 +92,36 @@ async def load_pack_for_team(db: AsyncSession, team_id: uuid.UUID) -> dict | Non
     return {"modules": modules, "modes": modes, "condensed_core": pack.condensed_core}
 
 
+async def _gather_all_doc_ids(
+    db: AsyncSession,
+    conversation_id: uuid.UUID,
+    new_doc_ids: list[uuid.UUID],
+) -> list[uuid.UUID]:
+    """Get all document IDs for a conversation: direct uploads + library-attached + newly passed."""
+    from app.documents.models import Document
+
+    # Direct uploads (conversation_id set on the document)
+    direct = await db.execute(
+        select(Document.id).where(
+            Document.conversation_id == conversation_id,
+            Document.status == "ready",
+        )
+    )
+    direct_ids = set(direct.scalars().all())
+
+    # Library-attached via junction table
+    attached = await db.execute(
+        select(ConversationDocument.document_id).where(
+            ConversationDocument.conversation_id == conversation_id
+        )
+    )
+    attached_ids = set(attached.scalars().all())
+
+    # Combine all, including newly passed IDs
+    all_ids = direct_ids | attached_ids | set(new_doc_ids)
+    return list(all_ids)
+
+
 async def prepare_chat(
     db: AsyncSession,
     conversation: Conversation,
@@ -128,11 +158,14 @@ async def prepare_chat(
     # Tell the provider what context size to request (important for Ollama)
     llm_config.max_context = context_limit
 
+    # Gather all docs for this conversation (not just current message)
+    all_doc_ids = await _gather_all_doc_ids(db, conversation.id, document_ids)
+
     if basic_mode:
         # Skip prompt pack compilation — plain chat
         doc_context = ""
-        if document_ids:
-            doc_context = await retrieve_document_context(db, document_ids, query_text=user_message)
+        if all_doc_ids:
+            doc_context = await retrieve_document_context(db, all_doc_ids, query_text=user_message)
 
         system_prompt = "You are a helpful assistant."
 
@@ -172,8 +205,8 @@ async def prepare_chat(
         compiler = PromptCompiler(modules=[], modes=[], model_context_limit=context_limit, condensed_core=None)
 
     doc_context = ""
-    if document_ids:
-        doc_context = await retrieve_document_context(db, document_ids, query_text=user_message)
+    if all_doc_ids:
+        doc_context = await retrieve_document_context(db, all_doc_ids, query_text=user_message)
 
     history = await load_conversation_history(db, conversation.id, max_tokens=8000)
 
