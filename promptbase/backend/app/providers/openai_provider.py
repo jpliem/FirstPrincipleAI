@@ -37,7 +37,7 @@ class OpenAIProvider(LLMProvider):
                 "max_tokens": config.max_tokens,
                 "stream": True,
             }
-            logger.info(f"OpenAI-compat request to {url} model={config.model}")
+            print(f"[OpenAI-compat] POST {url} model={config.model} max_tokens={config.max_tokens}", flush=True)
 
             timeout = httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0)
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
@@ -45,7 +45,7 @@ class OpenAIProvider(LLMProvider):
                     async with client.stream("POST", url, headers=headers, json=body) as response:
                         if response.status_code != 200:
                             error_body = await response.aread()
-                            logger.error(f"OpenAI-compat error {response.status_code}: {error_body.decode()[:500]}")
+                            print(f"[OpenAI-compat] ERROR {response.status_code} from {url}: {error_body.decode()[:500]}", flush=True)
                             yield f"[Error {response.status_code}: {error_body.decode()[:300]}]"
                             return
 
