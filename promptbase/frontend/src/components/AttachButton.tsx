@@ -125,19 +125,21 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
         <div className="absolute bottom-12 left-0 w-64 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-xl z-10 overflow-hidden">
           {!showLibrary ? (
             <>
-              <button
-                onClick={() => { setUploadTarget('chat'); fileInputRef.current?.click(); setOpen(false) }}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              >
-                <Upload size={14} />
-                Upload to this chat
-              </button>
+              {conversationId && (
+                <button
+                  onClick={() => { setUploadTarget('chat'); fileInputRef.current?.click(); setOpen(false) }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <Upload size={14} />
+                  Upload to this chat
+                </button>
+              )}
               <button
                 onClick={() => { setUploadTarget('library'); fileInputRef.current?.click(); setOpen(false) }}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-t border-gray-300 dark:border-gray-700"
+                className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${conversationId ? 'border-t border-gray-300 dark:border-gray-700' : ''}`}
               >
                 <Upload size={14} />
-                Upload to library
+                {conversationId ? 'Upload to library' : 'Upload file'}
               </button>
               <button
                 onClick={() => setShowLibrary(true)}
