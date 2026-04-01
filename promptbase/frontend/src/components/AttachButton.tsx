@@ -51,26 +51,24 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
 
     setOpen(false)
 
-    if (!conversationId) {
-      for (const file of Array.from(files)) {
-        onFileQueued(file)
-      }
-      return
-    }
-
+    // Always upload immediately — to library if no conversation, to conversation if exists
     setUploading(true)
     try {
       for (const file of Array.from(files)) {
         const form = new FormData()
         form.append('file', file)
-        const res = await api.post(
-          `${uploadBase}/upload?conversation_id=${conversationId}`,
-          form,
-          { headers: { 'Content-Type': 'multipart/form-data' } }
-        )
+        const uploadUrl = conversationId
+          ? `${uploadBase}/upload?conversation_id=${conversationId}`
+          : `${uploadBase}/upload`
+        const res = await api.post(uploadUrl, form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
         onDocAttached(res.data)
       }
-      queryClient.invalidateQueries({ queryKey: ['conversation-docs', conversationId] })
+      if (conversationId) {
+        queryClient.invalidateQueries({ queryKey: ['conversation-docs', conversationId] })
+      }
+      queryClient.invalidateQueries({ queryKey: ['library-docs', teamId ?? 'personal'] })
     } catch (err) {
       console.error('Upload failed:', err)
     } finally {

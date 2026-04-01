@@ -30,8 +30,6 @@ export default function ChatMain({ team, conversation, onConversationCreated, on
   const hasTextStartedRef = useRef(false)
   const [conversationId, setConversationId] = useState<string | null>(conversation?.id ?? null)
   const [lastMeta, setLastMeta] = useState<ChatMeta | null>(null)
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  const pendingFilesRef = useRef<File[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Error handling state
@@ -118,25 +116,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, on
               message_count: 1,
             })
           }
-          // Upload queued files now that conversation exists
-          const filesToUpload = pendingFilesRef.current
-          if (filesToUpload.length > 0) {
-            const cid = meta.conversation_id
-            pendingFilesRef.current = []
-            setPendingFiles([])
-            const uploadBase = teamId ? `/documents/${teamId}/upload` : '/documents/personal/upload'
-            Promise.all(
-              filesToUpload.map((file) => {
-                const form = new FormData()
-                form.append('file', file)
-                return api.post(`${uploadBase}?conversation_id=${cid}`, form, {
-                  headers: { 'Content-Type': 'multipart/form-data' },
-                })
-              })
-            ).then(() => {
-              queryClient.invalidateQueries({ queryKey: ['conversation-docs', cid] })
-            })
-          }
+          // Files are now uploaded immediately on attach — no queued upload needed
         },
         onThinking: (token) => {
           setThinkingBuffer((prev) => prev + token)
@@ -288,7 +268,6 @@ export default function ChatMain({ team, conversation, onConversationCreated, on
         teamId={teamId}
         conversationId={conversationId}
         basicMode={basicMode}
-        onUploadQueued={(files) => { pendingFilesRef.current = files; setPendingFiles(files) }}
       />
     </div>
   )

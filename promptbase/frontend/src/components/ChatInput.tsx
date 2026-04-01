@@ -19,13 +19,11 @@ interface Props {
   teamId: string | null
   conversationId: string | null
   basicMode: boolean
-  onUploadQueued: (files: File[]) => void
 }
 
-export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, onModeChange, detectedMode, teamId, conversationId, basicMode, onUploadQueued }: Props) {
+export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, onModeChange, detectedMode, teamId, conversationId, basicMode }: Props) {
   const [text, setText] = useState('')
   const [formData, setFormData] = useState<Record<string, string>>({})
-  const [queuedFiles, setQueuedFiles] = useState<File[]>([])
   const [attachedDocs, setAttachedDocs] = useState<Document[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const queryClient = useQueryClient()
@@ -48,12 +46,6 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, o
     if (!message && !activeMode?.form_schema) return
 
     const docIds = attachedDocs.filter((d) => d.status === 'ready').map((d) => d.id)
-
-    if (queuedFiles.length > 0) {
-      onUploadQueued(queuedFiles)
-      setQueuedFiles([])
-    }
-
     onSend(message, Object.keys(formData).length > 0 ? formData : undefined, docIds.length > 0 ? docIds : undefined)
     setText('')
     setFormData({})
@@ -64,10 +56,6 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, o
       e.preventDefault()
       handleSubmit(e)
     }
-  }
-
-  const handleFileQueued = (file: File) => {
-    setQueuedFiles((prev) => [...prev, file])
   }
 
   const handleDocAttached = (doc: Document) => {
@@ -87,10 +75,6 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, o
       await api.delete(deleteBase)
       queryClient.invalidateQueries({ queryKey: ['conversation-docs', conversationId] })
     }
-  }
-
-  const handleRemoveQueued = (index: number) => {
-    setQueuedFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   const docPills = attachedDocs.map((d) => ({
@@ -119,15 +103,15 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, o
       )}
       <AttachedDocs
         docs={docPills}
-        queuedFiles={queuedFiles}
+        queuedFiles={[]}
         onRemove={handleRemoveDoc}
-        onRemoveQueued={handleRemoveQueued}
+        onRemoveQueued={() => {}}
       />
       <form onSubmit={handleSubmit} className="flex gap-2 items-end">
         <AttachButton
           teamId={teamId}
           conversationId={conversationId}
-          onFileQueued={handleFileQueued}
+          onFileQueued={() => {}}
           onDocAttached={handleDocAttached}
           disabled={isStreaming}
         />
