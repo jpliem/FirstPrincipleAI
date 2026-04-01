@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Paperclip, Upload, Library, Loader2, FileText, FolderUp, CheckCircle2 } from 'lucide-react'
+import { Paperclip, Upload, Library, Loader2, FileText, FolderUp, CheckCircle2, Check } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useLibraryDocs } from '../hooks/useDocumentStatus'
@@ -17,7 +17,7 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
   const [open, setOpen] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [uploadTarget, setUploadTarget] = useState<'conversation' | 'library'>('conversation')
+  const [uploadSuccess, setUploadSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
   const uploadBase = teamId ? `/documents/${teamId}` : '/documents/personal'
@@ -25,50 +25,25 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return
-
-    if (uploadTarget === 'library') {
-      setOpen(false)
-      setUploading(true)
-      try {
-        for (const file of Array.from(files)) {
-          const form = new FormData()
-          form.append('file', file)
-          await api.post(`${uploadBase}/upload`, form, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          })
-        }
-        queryClient.invalidateQueries({ queryKey: ['library-docs', teamId ?? 'personal'] })
-        setOpen(true)
-        setShowLibrary(true)
-      } catch (err) {
-        console.error('Upload failed:', err)
-      } finally {
-        setUploading(false)
-        setUploadTarget('conversation')
-      }
-      return
-    }
-
     setOpen(false)
-
-    // Always upload immediately — to library if no conversation, to conversation if exists
     setUploading(true)
+    setUploadSuccess(false)
+
     try {
       for (const file of Array.from(files)) {
         const form = new FormData()
         form.append('file', file)
-        const uploadUrl = conversationId
-          ? `${uploadBase}/upload?conversation_id=${conversationId}`
-          : `${uploadBase}/upload`
-        const res = await api.post(uploadUrl, form, {
+        // Always upload without conversation_id — goes to library
+        // The doc ID is attached to the message when user sends
+        const res = await api.post(`${uploadBase}/upload`, form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         })
         onDocAttached(res.data)
       }
-      if (conversationId) {
-        queryClient.invalidateQueries({ queryKey: ['conversation-docs', conversationId] })
-      }
       queryClient.invalidateQueries({ queryKey: ['library-docs', teamId ?? 'personal'] })
+      // Show success briefly
+      setUploadSuccess(true)
+      setTimeout(() => setUploadSuccess(false), 2000)
     } catch (err) {
       console.error('Upload failed:', err)
     } finally {
@@ -118,10 +93,14 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
         type="button"
         onClick={() => { setOpen(!open); setShowLibrary(false) }}
         disabled={disabled || uploading}
-        className="flex-shrink-0 w-10 h-10 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-40 rounded-xl flex items-center justify-center transition-colors"
+        className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+          uploadSuccess
+            ? 'text-green-500'
+            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-40'
+        }`}
         title="Attach document"
       >
-        {uploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+        {uploading ? <Loader2 size={16} className="animate-spin" /> : uploadSuccess ? <Check size={16} /> : <Paperclip size={16} />}
       </button>
 
       {open && (
@@ -129,18 +108,11 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
           {!showLibrary ? (
             <>
               <button
-                onClick={() => { setUploadTarget('conversation'); fileInputRef.current?.click(); setOpen(false) }}
+                onClick={() => { fileInputRef.current?.click(); setOpen(false) }}
                 className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <Upload size={14} />
-                Upload to chat
-              </button>
-              <button
-                onClick={() => { setUploadTarget('library'); fileInputRef.current?.click() }}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-t border-gray-300 dark:border-gray-700"
-              >
-                <FolderUp size={14} />
-                Upload to library
+                Upload file
               </button>
               <button
                 onClick={() => setShowLibrary(true)}
@@ -162,7 +134,7 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
                 <span className="text-xs text-gray-400 dark:text-gray-600">{teamId ? 'Team' : 'Personal'} Library</span>
               </div>
               {libraryDocs.length === 0 ? (
-                <p className="px-3 py-4 text-xs text-gray-500 text-center">No library documents yet.<br />Upload one with "Upload to library".</p>
+                <p className="px-3 py-4 text-xs text-gray-500 text-center">No library documents yet.<br />Upload a file to get started.</p>
               ) : (
                 libraryDocs.map((doc) => {
                   const isReady = doc.status === 'ready'
