@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Paperclip, Upload, Library, Loader2, FileText, FolderUp, CheckCircle2, Check } from 'lucide-react'
+import { Paperclip, Upload, Library, Loader2, FileText, CheckCircle2, Check, Trash2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useLibraryDocs } from '../hooks/useDocumentStatus'
@@ -18,6 +18,7 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
   const [showLibrary, setShowLibrary] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
+  const [uploadTarget, setUploadTarget] = useState<'chat' | 'library'>('chat')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
   const uploadBase = teamId ? `/documents/${teamId}` : '/documents/personal'
@@ -33,21 +34,27 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
       for (const file of Array.from(files)) {
         const form = new FormData()
         form.append('file', file)
-        // Always upload without conversation_id — goes to library
-        // The doc ID is attached to the message when user sends
-        const res = await api.post(`${uploadBase}/upload`, form, {
+        // If uploading to chat and conversation exists, scope to conversation
+        // Otherwise upload to library (no conversation_id)
+        const uploadUrl = (uploadTarget === 'chat' && conversationId)
+          ? `${uploadBase}/upload?conversation_id=${conversationId}`
+          : `${uploadBase}/upload`
+        const res = await api.post(uploadUrl, form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         })
         onDocAttached(res.data)
       }
       queryClient.invalidateQueries({ queryKey: ['library-docs', teamId ?? 'personal'] })
-      // Show success briefly
+      if (conversationId) {
+        queryClient.invalidateQueries({ queryKey: ['conversation-docs', conversationId] })
+      }
       setUploadSuccess(true)
       setTimeout(() => setUploadSuccess(false), 2000)
     } catch (err) {
       console.error('Upload failed:', err)
     } finally {
       setUploading(false)
+      setUploadTarget('chat')
     }
   }
 
@@ -69,6 +76,17 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
       queryClient.invalidateQueries({ queryKey: ['conversation-docs', conversationId] })
     } catch (err) {
       console.error('Attach failed:', err)
+    }
+  }
+
+  const handleDeleteFromLibrary = async (e: React.MouseEvent, doc: Document) => {
+    e.stopPropagation()
+    const deleteUrl = teamId ? `/documents/${teamId}/${doc.id}` : `/documents/personal/${doc.id}`
+    try {
+      await api.delete(deleteUrl)
+      queryClient.invalidateQueries({ queryKey: ['library-docs', teamId ?? 'personal'] })
+    } catch (err) {
+      console.error('Delete failed:', err)
     }
   }
 
@@ -108,11 +126,18 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
           {!showLibrary ? (
             <>
               <button
-                onClick={() => { fileInputRef.current?.click(); setOpen(false) }}
+                onClick={() => { setUploadTarget('chat'); fileInputRef.current?.click(); setOpen(false) }}
                 className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <Upload size={14} />
-                Upload file
+                Upload to this chat
+              </button>
+              <button
+                onClick={() => { setUploadTarget('library'); fileInputRef.current?.click(); setOpen(false) }}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-t border-gray-300 dark:border-gray-700"
+              >
+                <Upload size={14} />
+                Upload to library
               </button>
               <button
                 onClick={() => setShowLibrary(true)}
@@ -139,21 +164,32 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
                 libraryDocs.map((doc) => {
                   const isReady = doc.status === 'ready'
                   return (
-                    <button
+                    <div
                       key={doc.id}
-                      onClick={() => isReady && handleAttachFromLibrary(doc)}
-                      disabled={!isReady}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                      className={`group/doc flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
                         isReady
                           ? 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
                           : 'text-gray-400 dark:text-gray-500 cursor-default'
                       }`}
-                      title={!isReady ? 'Still processing...' : doc.filename}
                     >
-                      <FileText size={12} className="text-gray-500 shrink-0" />
-                      <span className="truncate flex-1 text-left">{doc.filename}</span>
-                      {statusIndicator(doc)}
-                    </button>
+                      <button
+                        onClick={() => isReady && handleAttachFromLibrary(doc)}
+                        disabled={!isReady}
+                        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                        title={!isReady ? 'Still processing...' : `Attach ${doc.filename}`}
+                      >
+                        <FileText size={12} className="text-gray-500 shrink-0" />
+                        <span className="truncate flex-1">{doc.filename}</span>
+                        {statusIndicator(doc)}
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteFromLibrary(e, doc)}
+                        className="hidden group-hover/doc:block shrink-0 text-gray-400 hover:text-red-400 transition-colors"
+                        title="Delete from library"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   )
                 })
               )}
