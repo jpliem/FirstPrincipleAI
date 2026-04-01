@@ -6,7 +6,7 @@ import { useLibraryDocs } from '../hooks/useDocumentStatus'
 import type { Document } from '../types'
 
 interface Props {
-  teamId: string
+  teamId: string | null
   conversationId: string | null
   onFileQueued: (file: File) => void
   onDocAttached: (doc: Document) => void
@@ -20,6 +20,7 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
   const [uploadTarget, setUploadTarget] = useState<'conversation' | 'library'>('conversation')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
+  const uploadBase = teamId ? `/documents/${teamId}` : '/documents/personal'
   const { data: libraryDocs = [] } = useLibraryDocs(teamId)
 
   const handleUpload = async (files: FileList | null) => {
@@ -32,11 +33,11 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
         for (const file of Array.from(files)) {
           const form = new FormData()
           form.append('file', file)
-          await api.post(`/documents/${teamId}/upload`, form, {
+          await api.post(`${uploadBase}/upload`, form, {
             headers: { 'Content-Type': 'multipart/form-data' },
           })
         }
-        queryClient.invalidateQueries({ queryKey: ['library-docs', teamId] })
+        queryClient.invalidateQueries({ queryKey: ['library-docs', teamId ?? 'personal'] })
         setOpen(true)
         setShowLibrary(true)
       } catch (err) {
@@ -63,7 +64,7 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
         const form = new FormData()
         form.append('file', file)
         const res = await api.post(
-          `/documents/${teamId}/upload?conversation_id=${conversationId}`,
+          `${uploadBase}/upload?conversation_id=${conversationId}`,
           form,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         )
@@ -83,8 +84,6 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
     setShowLibrary(false)
 
     if (!conversationId) {
-      // No conversation yet — just add the doc to attached list
-      // It will be linked via API when the conversation is created
       onDocAttached(doc)
       return
     }
@@ -121,48 +120,48 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
         type="button"
         onClick={() => { setOpen(!open); setShowLibrary(false) }}
         disabled={disabled || uploading}
-        className="flex-shrink-0 w-10 h-10 text-gray-500 hover:text-gray-300 disabled:opacity-40 rounded-xl flex items-center justify-center transition-colors"
+        className="flex-shrink-0 w-10 h-10 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-40 rounded-xl flex items-center justify-center transition-colors"
         title="Attach document"
       >
         {uploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
       </button>
 
       {open && (
-        <div className="absolute bottom-12 left-0 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 overflow-hidden">
+        <div className="absolute bottom-12 left-0 w-64 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-xl z-10 overflow-hidden">
           {!showLibrary ? (
             <>
               <button
                 onClick={() => { setUploadTarget('conversation'); fileInputRef.current?.click(); setOpen(false) }}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <Upload size={14} />
                 Upload to chat
               </button>
               <button
                 onClick={() => { setUploadTarget('library'); fileInputRef.current?.click() }}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors border-t border-gray-700"
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-t border-gray-300 dark:border-gray-700"
               >
                 <FolderUp size={14} />
                 Upload to library
               </button>
               <button
                 onClick={() => setShowLibrary(true)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors border-t border-gray-700"
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-t border-gray-300 dark:border-gray-700"
               >
                 <Library size={14} />
-                From library {libraryDocs.length > 0 && <span className="text-gray-600 text-xs">({libraryDocs.length})</span>}
+                From library {libraryDocs.length > 0 && <span className="text-gray-400 dark:text-gray-600 text-xs">({libraryDocs.length})</span>}
               </button>
             </>
           ) : (
             <div className="max-h-64 overflow-y-auto">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-300 dark:border-gray-700">
                 <button
                   onClick={() => setShowLibrary(false)}
-                  className="text-xs text-gray-500 hover:text-gray-300"
+                  className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                 >
                   ← Back
                 </button>
-                <span className="text-xs text-gray-600">Team Library</span>
+                <span className="text-xs text-gray-400 dark:text-gray-600">{teamId ? 'Team' : 'Personal'} Library</span>
               </div>
               {libraryDocs.length === 0 ? (
                 <p className="px-3 py-4 text-xs text-gray-500 text-center">No library documents yet.<br />Upload one with "Upload to library".</p>
@@ -176,8 +175,8 @@ export default function AttachButton({ teamId, conversationId, onFileQueued, onD
                       disabled={!isReady}
                       className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
                         isReady
-                          ? 'text-gray-300 hover:bg-gray-700 cursor-pointer'
-                          : 'text-gray-500 cursor-default'
+                          ? 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
+                          : 'text-gray-400 dark:text-gray-500 cursor-default'
                       }`}
                       title={!isReady ? 'Still processing...' : doc.filename}
                     >
