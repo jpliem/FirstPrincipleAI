@@ -134,9 +134,9 @@ async def prepare_chat(
         if document_ids:
             doc_context = await retrieve_document_context(db, document_ids, query_text=user_message)
 
-        system_prompt = "You are a helpful assistant."
+        system_prompt = "You are a helpful assistant. When the user asks about 'the document' or 'the file', refer to the [USER DOCUMENTS] section below."
         if doc_context:
-            system_prompt += f"\n\n## Reference Documents\n\n{doc_context}"
+            system_prompt += f"\n\n---\n\n[USER DOCUMENTS]\n\n{doc_context}"
 
         history = await load_conversation_history(db, conversation.id, max_tokens=8000)
         history_tokens = sum(count_tokens_approx(m["content"]) for m in history)
