@@ -36,7 +36,6 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, o
   }, [conversationDocs])
 
   useEffect(() => {
-    setQueuedFiles([])
     setAttachedDocs([])
   }, [conversationId])
 
