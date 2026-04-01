@@ -40,13 +40,17 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, o
   }, [conversationId])
 
   // Poll processing docs until ready
+  const attachedDocsRef = useRef(attachedDocs)
+  attachedDocsRef.current = attachedDocs
+  const pendingCount = attachedDocs.filter((d) => d.status === 'pending' || d.status === 'processing').length
+
   useEffect(() => {
-    const pending = attachedDocs.filter((d) => d.status === 'pending' || d.status === 'processing')
-    if (pending.length === 0) return
+    if (pendingCount === 0) return
 
     const interval = setInterval(async () => {
+      const current = attachedDocsRef.current
       const updated = await Promise.all(
-        attachedDocs.map(async (d) => {
+        current.map(async (d) => {
           if (d.status === 'ready' || d.status === 'failed') return d
           try {
             const base = teamId ? `/documents/${teamId}/${d.id}` : `/documents/personal/${d.id}`
@@ -58,10 +62,10 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, o
         })
       )
       setAttachedDocs(updated)
-    }, 3000)
+    }, 2000)
 
     return () => clearInterval(interval)
-  }, [attachedDocs, teamId])
+  }, [pendingCount, teamId])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
