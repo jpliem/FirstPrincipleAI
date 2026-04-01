@@ -35,6 +35,8 @@ export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  display_content?: string | null
+  attached_files?: string[]
   thinking_content?: string | null
   token_count: number
   created_at: string

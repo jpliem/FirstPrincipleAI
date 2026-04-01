@@ -342,6 +342,37 @@ async def delete_conversation(
     await db.commit()
 
 
+import re
+
+DOC_HEADER_RE = re.compile(r'^### (.+)$', re.MULTILINE)
+DOC_PREFIX = "[Attached Documents]"
+
+
+def _format_message(msg: Message) -> MessageResponse:
+    """Extract attached filenames and clean display content from stored message."""
+    content = msg.content
+    display = content
+    files: list[str] = []
+
+    if msg.role == "user" and content.startswith(DOC_PREFIX):
+        # Split on the --- separator between docs and user text
+        parts = content.split("\n\n---\n\n", 1)
+        if len(parts) == 2:
+            doc_block, user_text = parts[0], parts[1]
+            files = DOC_HEADER_RE.findall(doc_block)
+            display = user_text
+        else:
+            # No separator found — just strip the prefix
+            display = content[len(DOC_PREFIX):].strip()
+
+    return MessageResponse(
+        id=msg.id, role=msg.role, content=content,
+        display_content=display, attached_files=files,
+        thinking_content=msg.thinking_content,
+        token_count=msg.token_count, created_at=msg.created_at,
+    )
+
+
 @router.get("/conversations/personal/{conversation_id}/messages", response_model=list[MessageResponse])
 async def get_personal_messages(
     conversation_id: uuid.UUID,
@@ -360,7 +391,7 @@ async def get_personal_messages(
     messages = await db.execute(
         select(Message).where(Message.conversation_id == conversation_id).order_by(Message.created_at.asc())
     )
-    return messages.scalars().all()
+    return [_format_message(m) for m in messages.scalars().all()]
 
 
 @router.get("/conversations/{team_id}/{conversation_id}/messages", response_model=list[MessageResponse])
@@ -383,4 +414,4 @@ async def get_messages(
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at.asc())
     )
-    return messages.scalars().all()
+    return [_format_message(m) for m in messages.scalars().all()]

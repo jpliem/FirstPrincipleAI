@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { User, Bot, Copy, Check } from 'lucide-react'
+import { User, Bot, Copy, Check, FileText } from 'lucide-react'
 import type { Message } from '../types'
 import ExportButton from './ExportButton'
 import ThinkingBlock from './ThinkingBlock'
@@ -16,10 +16,12 @@ interface Props {
 export default function ChatMessage({ message, isStreaming = false, thinkingContent, hasTextStarted = true }: Props) {
   const isUser = message.role === 'user'
   const thinking = thinkingContent || message.thinking_content || ''
+  const displayText = message.display_content ?? message.content
+  const attachedFiles = message.attached_files ?? []
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(message.content)
+    await navigator.clipboard.writeText(displayText)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -32,6 +34,16 @@ export default function ChatMessage({ message, isStreaming = false, thinkingCont
         {isUser ? <User size={14} /> : <Bot size={14} />}
       </div>
       <div className="flex-1 min-w-0 space-y-1">
+        {isUser && attachedFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-1">
+            {attachedFiles.map((filename, i) => (
+              <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50">
+                <FileText size={10} />
+                {filename}
+              </span>
+            ))}
+          </div>
+        )}
         {!isUser && thinking && (
           <ThinkingBlock
             content={thinking}
@@ -74,7 +86,7 @@ export default function ChatMessage({ message, isStreaming = false, thinkingCont
               },
             }}
           >
-            {message.content}
+            {displayText}
           </ReactMarkdown>
           {isStreaming && (
             <span className="inline-block w-2 h-4 bg-indigo-400 animate-pulse ml-0.5" />

@@ -17,6 +17,8 @@ class MessageResponse(BaseModel):
     id: uuid.UUID
     role: str
     content: str
+    display_content: str | None = None
+    attached_files: list[str] = []
     thinking_content: str | None = None
     token_count: int
     created_at: datetime
