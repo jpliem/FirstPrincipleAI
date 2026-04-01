@@ -617,33 +617,36 @@ async def list_provider_models(
                 return {"provider": provider_name, "models": models}
 
             elif provider_name == "openrouter":
+                url = (base_url.rstrip("/") + "/api/v1/models") if base_url else "https://openrouter.ai/api/v1/models"
                 res = await client.get(
-                    "https://openrouter.ai/api/v1/models",
+                    url,
                     headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
                 )
                 res.raise_for_status()
                 data = res.json()
                 models = [m["id"] for m in data.get("data", [])]
-                return {"provider": provider_name, "models": models[:100]}  # limit to 100
+                return {"provider": provider_name, "models": models[:100]}
 
             elif provider_name == "openai":
-                if not api_key:
-                    return {"provider": provider_name, "models": [], "error": "No API key configured"}
-                res = await client.get(
-                    "https://api.openai.com/v1/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
+                url = (base_url.rstrip("/") + "/v1/models") if base_url else "https://api.openai.com/v1/models"
+                headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+                res = await client.get(url, headers=headers)
                 res.raise_for_status()
                 data = res.json()
-                # Filter to chat models only
-                chat_models = [
-                    m["id"] for m in data.get("data", [])
-                    if any(k in m["id"] for k in ["gpt-4", "gpt-3.5", "o1", "o3"])
-                ]
-                return {"provider": provider_name, "models": sorted(chat_models)}
+                models = [m["id"] for m in data.get("data", [])]
+                return {"provider": provider_name, "models": sorted(models)}
 
             elif provider_name == "anthropic":
-                # Anthropic doesn't have a models list API — return known models
+                if base_url:
+                    # Custom base URL — try OpenAI-compatible models endpoint
+                    url = base_url.rstrip("/") + "/v1/models"
+                    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+                    res = await client.get(url, headers=headers)
+                    res.raise_for_status()
+                    data = res.json()
+                    models = [m["id"] for m in data.get("data", [])]
+                    return {"provider": provider_name, "models": sorted(models)}
+                # No custom URL — return known Anthropic models
                 return {"provider": provider_name, "models": [
                     "claude-opus-4-20250514",
                     "claude-sonnet-4-20250514",
