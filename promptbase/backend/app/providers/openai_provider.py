@@ -49,6 +49,7 @@ class OpenAIProvider(LLMProvider):
                             yield f"[Error {response.status_code}: {error_body.decode()[:300]}]"
                             return
 
+                        in_reasoning = False
                         async for line in response.aiter_lines():
                             if not line.startswith("data: "):
                                 continue
@@ -57,11 +58,25 @@ class OpenAIProvider(LLMProvider):
                                 break
                             try:
                                 chunk = json.loads(data)
-                                content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                # Qwen3/deepseek send thinking in reasoning_content
+                                reasoning = delta.get("reasoning_content", "")
+                                if reasoning:
+                                    if not in_reasoning:
+                                        yield "<think>"
+                                        in_reasoning = True
+                                    yield reasoning
+                                content = delta.get("content", "")
                                 if content:
+                                    if in_reasoning:
+                                        yield "</think>"
+                                        in_reasoning = False
                                     yield content
                             except json.JSONDecodeError:
                                 continue
+                        # Close thinking if stream ended during reasoning
+                        if in_reasoning:
+                            yield "</think>"
                 except httpx.ConnectError as e:
                     yield f"[Cannot connect to {base_url}: {e}]"
                 except httpx.ReadTimeout:
