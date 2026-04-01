@@ -16,7 +16,7 @@ from app.chat.schemas import (
     ConversationUpdate,
     MessageResponse,
 )
-from app.chat.service import get_or_create_conversation, prepare_chat, stream_chat_response
+from app.chat.service import generate_title, get_or_create_conversation, prepare_chat, stream_chat_response
 from app.config import settings
 from app.database import get_db
 from app.providers.base import LLMConfig
@@ -145,17 +145,34 @@ async def chat_stream(
         }
         yield f"data: {_json.dumps(meta)}\n\n"
 
+        full_text = ""
         try:
             async for event_type, content in stream_chat_response(
                 db, conversation, body.message, prepared,
             ):
                 escaped = content.replace("\n", "\\n")
                 yield f"data: {event_type}:{escaped}\n\n"
+                if event_type == "text":
+                    full_text += content
         except Exception as e:
             import traceback
             traceback.print_exc()
             yield f"data: [ERROR] {str(e)[:500]}\n\n"
-        yield "data: [DONE]\n\n"
+
+        # Auto-generate title after first exchange
+        new_title = None
+        try:
+            new_title = await generate_title(
+                db, conversation, body.message, full_text,
+                provider_name, llm_config,
+            )
+        except Exception:
+            pass
+
+        if new_title:
+            yield f"data: [DONE]{_json.dumps({'new_title': new_title})}\n\n"
+        else:
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

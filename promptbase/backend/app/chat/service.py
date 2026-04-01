@@ -237,3 +237,54 @@ async def stream_chat_response(
     )
     db.add(assistant_msg)
     await db.commit()
+
+
+async def generate_title(
+    db: AsyncSession,
+    conversation: Conversation,
+    user_message: str,
+    assistant_content: str,
+    provider_name: str,
+    llm_config: LLMConfig,
+) -> str | None:
+    """Generate an AI title for a conversation after the first exchange."""
+    from app.providers.registry import get_provider
+
+    # Only auto-name on the first exchange
+    result = await db.execute(
+        select(Message).where(Message.conversation_id == conversation.id)
+    )
+    msg_count = len(result.scalars().all())
+    if msg_count != 2:
+        return None
+
+    provider = get_provider(provider_name)
+    if not provider:
+        return None
+
+    prompt = "Summarize this conversation in 5-8 words as a title. Reply with only the title, no quotes."
+    messages = [
+        {"role": "user", "content": user_message},
+        {"role": "assistant", "content": assistant_content[:200]},
+    ]
+
+    title_config = LLMConfig(
+        model=llm_config.model,
+        api_key=llm_config.api_key,
+        base_url=llm_config.base_url,
+        temperature=0.3,
+        max_tokens=30,
+    )
+
+    try:
+        title = ""
+        async for token in provider.stream_chat(prompt, messages, title_config):
+            title += token
+        title = title.strip().strip('"').strip("'")[:200]
+        if title:
+            conversation.title = title
+            await db.commit()
+            return title
+    except Exception:
+        pass
+    return None
