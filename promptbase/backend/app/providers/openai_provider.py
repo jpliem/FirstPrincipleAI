@@ -15,7 +15,10 @@ MODEL_CONTEXT = {
 
 class OpenAIProvider(LLMProvider):
     async def stream_chat(self, system_prompt: str, messages: list[dict], config: LLMConfig) -> AsyncIterator[str]:
-        client = openai.AsyncOpenAI(api_key=config.api_key)
+        client_kwargs = {"api_key": config.api_key or "no-key"}
+        if config.base_url:
+            client_kwargs["base_url"] = config.base_url.rstrip("/") + "/v1"
+        client = openai.AsyncOpenAI(**client_kwargs)
         full_messages = [{"role": "system", "content": system_prompt}] + messages
         stream = await client.chat.completions.create(
             model=config.model, messages=full_messages,
@@ -26,7 +29,10 @@ class OpenAIProvider(LLMProvider):
                 yield chunk.choices[0].delta.content
 
     async def embed(self, texts: list[str], config: LLMConfig) -> list[list[float]]:
-        client = openai.AsyncOpenAI(api_key=config.api_key)
+        client_kwargs = {"api_key": config.api_key or "no-key"}
+        if config.base_url:
+            client_kwargs["base_url"] = config.base_url.rstrip("/") + "/v1"
+        client = openai.AsyncOpenAI(**client_kwargs)
         response = await client.embeddings.create(model=config.model, input=texts)
         return [item.embedding for item in response.data]
 

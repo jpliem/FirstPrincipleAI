@@ -25,6 +25,7 @@ class OllamaProvider(LLMProvider):
                         "model": config.model,
                         "messages": full_messages,
                         "stream": True,
+                        "think": False,  # disable server-managed thinking (Qwen3 etc) — we parse <think> tags ourselves
                         "options": {
                             "temperature": config.temperature,
                             "num_predict": config.max_tokens,

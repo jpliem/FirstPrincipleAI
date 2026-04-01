@@ -264,8 +264,7 @@ async def generate_title(
 
     prompt = "Summarize this conversation in 5-8 words as a title. Reply with only the title, no quotes."
     messages = [
-        {"role": "user", "content": user_message},
-        {"role": "assistant", "content": assistant_content[:200]},
+        {"role": "user", "content": f"User: {user_message}\n\nAssistant: {assistant_content[:200]}\n\nGenerate a short title for the above conversation."},
     ]
 
     title_config = LLMConfig(
@@ -281,7 +280,7 @@ async def generate_title(
         async for token in provider.stream_chat(prompt, messages, title_config):
             title += token
         title = title.strip().strip('"').strip("'")[:200]
-        if title:
+        if title and not title.startswith("["):
             conversation.title = title
             await db.commit()
             return title
