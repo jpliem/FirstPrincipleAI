@@ -246,6 +246,7 @@ async def generate_title(
     assistant_content: str,
     provider_name: str,
     llm_config: LLMConfig,
+    document_names: list[str] | None = None,
 ) -> str | None:
     """Generate an AI title for a conversation after the first exchange."""
     from app.providers.registry import get_provider
@@ -262,9 +263,20 @@ async def generate_title(
     if not provider:
         return None
 
-    prompt = "Summarize this conversation in 5-8 words as a title. Reply with only the title, no quotes."
+    # Build context with document names and response summary
+    context_parts = []
+    if document_names:
+        context_parts.append(f"Documents attached: {', '.join(document_names)}")
+    context_parts.append(f"User message: {user_message[:500]}")
+    context_parts.append(f"Assistant response summary: {assistant_content[:500]}")
+    context = "\n".join(context_parts)
+
+    prompt = (
+        "Generate a concise conversation title. If documents are attached, include the project name or document subject. "
+        "Include a date if one is mentioned. Keep it under 12 words. Reply with ONLY the title, no quotes, no explanation."
+    )
     messages = [
-        {"role": "user", "content": f"User: {user_message}\n\nAssistant: {assistant_content[:200]}\n\nGenerate a short title for the above conversation."},
+        {"role": "user", "content": f"{context}\n\nGenerate the title."},
     ]
 
     title_config = LLMConfig(
@@ -272,14 +284,19 @@ async def generate_title(
         api_key=llm_config.api_key,
         base_url=llm_config.base_url,
         temperature=0.3,
-        max_tokens=30,
+        max_tokens=100,
     )
 
     try:
         title = ""
         async for token in provider.stream_chat(prompt, messages, title_config):
             title += token
-        title = title.strip().strip('"').strip("'")[:200]
+        # Strip thinking tags if model includes them
+        import re
+        title = re.sub(r'<think>.*?</think>', '', title, flags=re.DOTALL).strip()
+        title = title.strip().strip('"').strip("'").strip()
+        # Take first line only (in case model adds explanation)
+        title = title.split('\n')[0].strip()[:200]
         if title and not title.startswith("["):
             conversation.title = title
             await db.commit()

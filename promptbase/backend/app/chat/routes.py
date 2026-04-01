@@ -134,9 +134,18 @@ async def chat_stream(
         # Auto-generate title after first exchange
         new_title = None
         try:
+            # Get document names for title context
+            doc_names = []
+            if body.document_ids:
+                from app.documents.models import Document
+                for did in body.document_ids:
+                    doc_result = await db.execute(select(Document).where(Document.id == did))
+                    doc = doc_result.scalar_one_or_none()
+                    if doc:
+                        doc_names.append(doc.filename)
             new_title = await generate_title(
                 db, conversation, body.message, full_text,
-                provider_name, llm_config,
+                provider_name, llm_config, document_names=doc_names,
             )
         except Exception:
             pass
