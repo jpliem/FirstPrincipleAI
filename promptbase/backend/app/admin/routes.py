@@ -3,14 +3,14 @@ import json
 import uuid
 import zipfile
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.importer import import_pack_from_zip
 from app.auth.dependencies import get_current_user
-from app.auth.models import Team, User
+from app.auth.models import InviteLink, Team, TeamMember, User
 from app.auth.service import get_user_team_role
 from app.compiler.budget import count_tokens_approx
 from app.compiler.models import PromptModule, PromptPack, TaskMode
@@ -79,17 +79,19 @@ async def delete_pack(
     if not pack:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    # Check if assigned to a team
+    # Check if assigned to any teams
     team_result = await db.execute(select(Team).where(Team.pack_id == pack_id))
-    assigned_team = team_result.scalar_one_or_none()
-    if assigned_team and not force:
+    assigned_teams = team_result.scalars().all()
+    if assigned_teams and not force:
+        names = ", ".join(t.name for t in assigned_teams)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Pack is assigned to team '{assigned_team.name}'. Use force=true to delete anyway.",
+            detail=f"Pack is assigned to team(s): {names}. Use force=true to delete anyway.",
         )
 
-    if assigned_team:
-        assigned_team.pack_id = None
+    for t in assigned_teams:
+        t.pack_id = None
+    if assigned_teams:
         await db.flush()
 
     # Delete modes and modules
@@ -107,7 +109,7 @@ async def delete_pack(
 
 @router.post("/packs/import")
 async def import_pack(
-    file: UploadFile, name: str = "Imported Pack",
+    file: UploadFile, name: str = Form("Imported Pack"),
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
     if not user.is_super_admin:
@@ -716,3 +718,141 @@ async def set_team_llm_config(
     await db.commit()
     await db.refresh(config)
     return config
+
+
+# ── Users ──────────────────────────────────────────────────────────────
+
+@router.get("/users")
+async def list_users(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    users = result.scalars().all()
+
+    # Get team memberships for all users
+    memberships = (await db.execute(
+        select(TeamMember.user_id, Team.id, Team.name, TeamMember.role_in_team)
+        .join(Team, Team.id == TeamMember.team_id)
+    )).all()
+
+    user_teams: dict[str, list] = {}
+    for user_id, team_id, team_name, role in memberships:
+        user_teams.setdefault(str(user_id), []).append({
+            "team_id": str(team_id), "team_name": team_name, "role": role,
+        })
+
+    return [
+        {
+            "id": str(u.id), "email": u.email, "name": u.name,
+            "is_super_admin": u.is_super_admin, "is_active": u.is_active,
+            "created_at": u.created_at.isoformat(),
+            "teams": user_teams.get(str(u.id), []),
+        }
+        for u in users
+    ]
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin required")
+    if user.id == user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete yourself")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    target = result.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    from sqlalchemy import delete as sa_delete
+
+    # Remove team memberships and invite links
+    await db.execute(sa_delete(TeamMember).where(TeamMember.user_id == user_id))
+    await db.execute(sa_delete(InviteLink).where(InviteLink.created_by == user_id))
+
+    await db.delete(target)
+    await db.commit()
+
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: uuid.UUID,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin required")
+
+    new_password = body.get("new_password", "")
+    if len(new_password) < 8:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    target = result.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    from app.auth.service import hash_password
+    target.password_hash = hash_password(new_password)
+    await db.commit()
+    return {"success": True}
+
+
+# ── Teams ──────────────────────────────────────────────────────────────
+
+@router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_team(
+    team_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin required")
+
+    result = await db.execute(select(Team).where(Team.id == team_id))
+    team = result.scalar_one_or_none()
+    if not team:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    from sqlalchemy import delete as sa_delete
+    from app.chat.models import Conversation, ConversationDocument, Message
+    from app.documents.models import Document, DocumentChunk
+    from app.providers.models import TeamLLMConfig
+
+    # 1. Get IDs for cascading deletes
+    conv_ids = (await db.execute(
+        select(Conversation.id).where(Conversation.team_id == team_id)
+    )).scalars().all()
+    doc_ids = (await db.execute(
+        select(Document.id).where(Document.team_id == team_id)
+    )).scalars().all()
+
+    # 2. Delete junction rows
+    if conv_ids:
+        await db.execute(sa_delete(ConversationDocument).where(ConversationDocument.conversation_id.in_(conv_ids)))
+    if doc_ids:
+        await db.execute(sa_delete(ConversationDocument).where(ConversationDocument.document_id.in_(doc_ids)))
+
+    # 3. Delete messages and conversations
+    if conv_ids:
+        await db.execute(sa_delete(Message).where(Message.conversation_id.in_(conv_ids)))
+        await db.execute(sa_delete(Conversation).where(Conversation.team_id == team_id))
+
+    # 4. Delete document chunks and documents
+    if doc_ids:
+        await db.execute(sa_delete(DocumentChunk).where(DocumentChunk.document_id.in_(doc_ids)))
+    await db.execute(sa_delete(Document).where(Document.team_id == team_id))
+
+    # 5. Delete team config, invites, members
+    await db.execute(sa_delete(TeamLLMConfig).where(TeamLLMConfig.team_id == team_id))
+    await db.execute(sa_delete(InviteLink).where(InviteLink.team_id == team_id))
+    await db.execute(sa_delete(TeamMember).where(TeamMember.team_id == team_id))
+
+    # 6. Delete team
+    await db.delete(team)
+    await db.commit()
