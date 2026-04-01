@@ -132,9 +132,19 @@ async def prepare_chat(
     basic_mode: bool = False,
 ) -> dict:
     """Prepare the chat: save user message, compile prompt, return metadata + ready state."""
+    # Inject document context into user message (only for newly attached docs)
+    doc_context = ""
+    if document_ids:
+        doc_context = await retrieve_document_context(db, document_ids, query_text=user_message)
+
+    if doc_context:
+        stored_message = f"[Attached Documents]\n\n{doc_context}\n\n---\n\n{user_message}"
+    else:
+        stored_message = user_message
+
     user_msg = Message(
         conversation_id=conversation.id, role="user",
-        content=user_message, token_count=count_tokens_approx(user_message),
+        content=stored_message, token_count=count_tokens_approx(stored_message),
     )
     db.add(user_msg)
     await db.flush()
@@ -158,21 +168,13 @@ async def prepare_chat(
     # Tell the provider what context size to request (important for Ollama)
     llm_config.max_context = context_limit
 
-    # Gather all docs for this conversation (not just current message)
-    all_doc_ids = await _gather_all_doc_ids(db, conversation.id, document_ids)
-
     if basic_mode:
-        # Skip prompt pack compilation — plain chat
-        doc_context = ""
-        if all_doc_ids:
-            doc_context = await retrieve_document_context(db, all_doc_ids, query_text=user_message)
-
         system_prompt = "You are a helpful assistant."
 
         history = await load_conversation_history(db, conversation.id, max_tokens=8000)
         history_tokens = sum(count_tokens_approx(m["content"]) for m in history)
-        prompt_tokens = count_tokens_approx(system_prompt) + count_tokens_approx(doc_context)
-        used_tokens = prompt_tokens + history_tokens + count_tokens_approx(user_message)
+        prompt_tokens = count_tokens_approx(system_prompt)
+        used_tokens = prompt_tokens + history_tokens + count_tokens_approx(stored_message)
         dynamic_max = max(1024, context_limit - used_tokens - 256)
         llm_config.max_tokens = min(llm_config.max_tokens, dynamic_max)
 
@@ -180,7 +182,6 @@ async def prepare_chat(
             "provider": provider,
             "compiled": {
                 "system_prompt": system_prompt,
-                "doc_context": doc_context,
                 "total_tokens": prompt_tokens,
                 "modules_loaded": [],
                 "modules_by_layer": {},
@@ -191,6 +192,7 @@ async def prepare_chat(
                 "core_mode": None,
             },
             "history": history,
+            "stored_message": stored_message,
             "context_limit": context_limit,
             "llm_config": llm_config,
         }
@@ -204,17 +206,12 @@ async def prepare_chat(
     else:
         compiler = PromptCompiler(modules=[], modes=[], model_context_limit=context_limit, condensed_core=None)
 
-    doc_context = ""
-    if all_doc_ids:
-        doc_context = await retrieve_document_context(db, all_doc_ids, query_text=user_message)
-
     history = await load_conversation_history(db, conversation.id, max_tokens=8000)
 
     compiled = compiler.compile(
         user_text=user_message, mode=conversation.mode, doc_context="",
-        history_tokens=sum(count_tokens_approx(m["content"]) for m in history) + count_tokens_approx(doc_context),
+        history_tokens=sum(count_tokens_approx(m["content"]) for m in history),
     )
-    compiled["doc_context"] = doc_context
 
     # Dynamic max_tokens
     history_tokens = sum(count_tokens_approx(m["content"]) for m in history)
@@ -226,6 +223,7 @@ async def prepare_chat(
         "provider": provider,
         "compiled": compiled,
         "history": history,
+        "stored_message": stored_message,
         "context_limit": context_limit,
         "llm_config": llm_config,
     }
@@ -249,13 +247,10 @@ async def stream_chat_response(
         yield ("text", "Error: Provider not found")
         return
 
-    # Attach document context to user message (not system prompt)
-    doc_context = compiled.get("doc_context", "")
-    if doc_context:
-        augmented_message = f"[Attached Documents]\n\n{doc_context}\n\n---\n\n{user_message}"
-    else:
-        augmented_message = user_message
-    messages = history + [{"role": "user", "content": augmented_message}]
+    # Use stored_message (includes doc context if any) for the current turn
+    # History already contains doc context from previous turns
+    stored_message = prepared.get("stored_message", user_message)
+    messages = history + [{"role": "user", "content": stored_message}]
     parser = ThinkTagParser()
 
     async for token in provider.stream_chat(compiled["system_prompt"], messages, llm_config):
