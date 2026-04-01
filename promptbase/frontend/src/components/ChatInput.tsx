@@ -76,6 +76,7 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, o
     onSend(message, Object.keys(formData).length > 0 ? formData : undefined, docIds.length > 0 ? docIds : undefined)
     setText('')
     setFormData({})
+    setAttachedDocs([])
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
