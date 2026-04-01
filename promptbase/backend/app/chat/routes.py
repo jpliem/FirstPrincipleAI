@@ -75,8 +75,22 @@ async def _load_llm_config(db: AsyncSession, team_id: uuid.UUID) -> tuple[str, L
     )
 
 
-async def _load_llm_config_from_env() -> tuple[str, LLMConfig]:
-    """Load LLM config from environment variables (no team)."""
+async def _load_llm_config_from_env(db: AsyncSession) -> tuple[str, LLMConfig]:
+    """Load LLM config: try first enabled DB provider, then fall back to env vars."""
+    # Try DB-configured providers first (same ones visible in Admin → Providers)
+    result = await db.execute(
+        select(LLMProviderConfig).where(LLMProviderConfig.is_enabled.is_(True))
+    )
+    db_provider = result.scalars().first()
+    if db_provider and db_provider.default_model:
+        return db_provider.name, LLMConfig(
+            model=db_provider.default_model,
+            api_key=db_provider.api_key_encrypted or "",
+            base_url=db_provider.base_url or "",
+            temperature=0.7, max_tokens=4096,
+        )
+
+    # Fall back to env vars
     if settings.anthropic_api_key:
         return "anthropic", LLMConfig(
             model="claude-sonnet-4-20250514", api_key=settings.anthropic_api_key,
@@ -116,7 +130,7 @@ async def chat_stream(
     if body.team_id:
         provider_name, llm_config = await _load_llm_config(db, body.team_id)
     else:
-        provider_name, llm_config = await _load_llm_config_from_env()
+        provider_name, llm_config = await _load_llm_config_from_env(db)
 
     # Prepare: compile prompt, detect mode, calculate budget
     prepared = await prepare_chat(
