@@ -105,6 +105,5 @@ def process_document(self, document_id: str):
                 session.commit()
         except Exception:
             session.rollback()
-        raise self.retry(exc=e, countdown=60)
     finally:
         session.close()

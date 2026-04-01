@@ -96,7 +96,7 @@ export default function DocumentUpload({ teamId, onDocumentsChange }: Props) {
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); upload(e.dataTransfer.files) }}
         className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors ${
-          dragOver ? 'border-indigo-500 bg-indigo-500/10' : 'border-gray-700 hover:border-gray-600'
+          dragOver ? 'border-indigo-500 bg-indigo-500/10' : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'
         }`}
       >
         <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.txt,.csv" className="hidden" onChange={(e) => upload(e.target.files)} />
@@ -117,7 +117,7 @@ export default function DocumentUpload({ teamId, onDocumentsChange }: Props) {
               key={doc.id}
               onClick={() => doc.status === 'ready' && toggleDoc(doc.id)}
               className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group cursor-pointer transition-colors ${
-                selectedIds.has(doc.id) ? 'bg-indigo-900/30 border border-indigo-700/50' : 'bg-gray-800/50 hover:bg-gray-800'
+                selectedIds.has(doc.id) ? 'bg-indigo-100 dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700/50' : 'bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-800'
               }`}
             >
               {doc.status === 'ready' && (
@@ -130,7 +130,7 @@ export default function DocumentUpload({ teamId, onDocumentsChange }: Props) {
                 />
               )}
               <FileText size={12} className="text-gray-500 shrink-0" />
-              <span className="flex-1 text-xs text-gray-300 truncate" title={doc.filename}>{doc.filename}</span>
+              <span className="flex-1 text-xs text-gray-700 dark:text-gray-300 truncate" title={doc.filename}>{doc.filename}</span>
               <span className="text-xs text-gray-600 shrink-0">{formatSize(doc.file_size)}</span>
               {STATUS_ICON[doc.status]}
               <button

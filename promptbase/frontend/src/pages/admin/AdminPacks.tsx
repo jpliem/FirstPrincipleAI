@@ -66,13 +66,31 @@ export default function AdminPacks() {
     URL.revokeObjectURL(url)
   }
 
+  const exportAllPacks = async () => {
+    const token = getAccessToken()
+    for (const pack of packs) {
+      const res = await fetch(`/api/admin/packs/${pack.id}/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${pack.name}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+  }
+
+  const totalModules = packs.reduce((sum, p) => sum + (p.module_count ?? 0), 0)
+
   return (
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Prompt Packs</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Manage prompt instruction packs and their modules
+            {packs.length} pack{packs.length !== 1 ? 's' : ''} · {totalModules} module{totalModules !== 1 ? 's' : ''} total
           </p>
         </div>
         <div className="flex gap-2">
@@ -90,6 +108,15 @@ export default function AdminPacks() {
               e.target.value = ''
             }}
           />
+          {packs.length > 0 && (
+            <button
+              onClick={exportAllPacks}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 rounded-lg text-sm transition-colors"
+            >
+              <Download size={16} />
+              Download All
+            </button>
+          )}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 rounded-lg text-sm transition-colors"

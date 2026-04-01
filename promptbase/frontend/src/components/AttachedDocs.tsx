@@ -38,11 +38,11 @@ export default function AttachedDocs({ docs, queuedFiles, onRemove, onRemoveQueu
       {queuedFiles.map((file, idx) => (
         <span
           key={`queued-${idx}`}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-800 border border-gray-700 rounded-full text-xs text-gray-400"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full text-xs text-gray-600 dark:text-gray-400"
         >
           <FileText size={10} className="shrink-0" />
           <span className="truncate max-w-[120px]">{file.name}</span>
-          <span className="text-yellow-400 text-[10px]">queued</span>
+          <span className="text-yellow-500 dark:text-yellow-400 text-[10px]">queued</span>
           <button
             type="button"
             onClick={() => onRemoveQueued(idx)}
@@ -55,7 +55,7 @@ export default function AttachedDocs({ docs, queuedFiles, onRemove, onRemoveQueu
       {docs.map((doc) => (
         <span
           key={doc.id}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-800 border border-gray-700 rounded-full text-xs text-gray-400"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full text-xs text-gray-600 dark:text-gray-400"
         >
           <FileText size={10} className="shrink-0" />
           <span className="truncate max-w-[120px]">{doc.filename}</span>

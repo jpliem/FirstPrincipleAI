@@ -44,10 +44,10 @@ export default function ProcessTimeline({ meta }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 px-4 py-2 text-xs text-gray-600 border-l-2 border-gray-800 ml-4 my-1 flex-wrap">
+    <div className="flex items-center gap-1.5 px-4 py-2 text-xs text-gray-500 dark:text-gray-600 border-l-2 border-gray-300 dark:border-gray-800 ml-4 my-1 flex-wrap">
       {segments.map((seg, i) => (
         <span key={i} className="flex items-center gap-1.5">
-          {i > 0 && <span className="text-gray-700">&middot;</span>}
+          {i > 0 && <span className="text-gray-400 dark:text-gray-700">&middot;</span>}
           <span className={
             seg.includes('mode') ? 'text-indigo-500' :
             seg.includes('trimmed') ? 'text-amber-500' :

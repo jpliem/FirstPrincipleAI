@@ -106,13 +106,44 @@ export default function PackBuilderModal({ sourcePackId, sourcePackName, onClose
           } else if (jsonStr.includes('```')) {
             jsonStr = jsonStr.split('```')[1].split('```')[0]
           }
-          const idx = jsonStr.indexOf('{')
-          if (idx >= 0) jsonStr = jsonStr.slice(idx)
-          const lastIdx = jsonStr.lastIndexOf('}')
-          if (lastIdx >= 0) jsonStr = jsonStr.slice(0, lastIdx + 1)
+          const firstBrace = jsonStr.indexOf('{')
+          if (firstBrace >= 0) jsonStr = jsonStr.slice(firstBrace)
+          const lastBrace = jsonStr.lastIndexOf('}')
+          if (lastBrace >= 0) jsonStr = jsonStr.slice(0, lastBrace + 1)
 
-          const parsed = JSON.parse(jsonStr)
-          setGeneratedModules(parsed.modules || [])
+          let parsed: any
+          try {
+            parsed = JSON.parse(jsonStr)
+          } catch {
+            // Try to recover truncated JSON by closing open structures
+            let repaired = jsonStr
+            // If cut off mid-content string, close it
+            // Count unescaped quotes to see if we're inside a string
+            let inString = false
+            for (let i = 0; i < repaired.length; i++) {
+              if (repaired[i] === '\\' && inString) { i++; continue }
+              if (repaired[i] === '"') inString = !inString
+            }
+            if (inString) repaired += '"'
+            // Close any open objects/arrays
+            const opens: string[] = []
+            let inStr = false
+            for (let i = 0; i < repaired.length; i++) {
+              if (repaired[i] === '\\' && inStr) { i++; continue }
+              if (repaired[i] === '"') { inStr = !inStr; continue }
+              if (inStr) continue
+              if (repaired[i] === '{') opens.push('}')
+              else if (repaired[i] === '[') opens.push(']')
+              else if (repaired[i] === '}' || repaired[i] === ']') opens.pop()
+            }
+            // Remove trailing comma before closing
+            repaired = repaired.replace(/,\s*$/, '')
+            repaired += opens.reverse().join('')
+            parsed = JSON.parse(repaired)
+          }
+          const modules = parsed.modules || []
+          if (modules.length === 0) throw new Error('No modules generated')
+          setGeneratedModules(modules)
           if (parsed.pack_name) setPackName(parsed.pack_name)
           setPhase('review')
         } catch {

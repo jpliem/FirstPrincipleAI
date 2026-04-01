@@ -33,7 +33,7 @@ export default function ThinkingBlock({ content, isStreaming, hasTextStarted }: 
     <div className="mb-3">
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-400 transition-colors py-1"
+        className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors py-1"
       >
         <ChevronRight
           size={12}
@@ -41,7 +41,7 @@ export default function ThinkingBlock({ content, isStreaming, hasTextStarted }: 
         />
         <span>Thinking{isStreaming && !hasTextStarted ? '...' : ''}</span>
         {collapsed && (
-          <span className="text-gray-600 ml-1 truncate max-w-xs">
+          <span className="text-gray-400 dark:text-gray-600 ml-1 truncate max-w-xs">
             {content.slice(0, 60)}{content.length > 60 ? '...' : ''}
           </span>
         )}
@@ -53,7 +53,7 @@ export default function ThinkingBlock({ content, isStreaming, hasTextStarted }: 
       >
         <div
           ref={contentRef}
-          className="pl-4 border-l border-gray-700 mt-1 text-sm text-gray-500 italic prose prose-invert prose-sm max-w-none overflow-y-auto max-h-[500px]"
+          className="pl-4 border-l border-gray-300 dark:border-gray-700 mt-1 text-sm text-gray-400 dark:text-gray-500 italic prose dark:prose-invert prose-sm max-w-none overflow-y-auto max-h-[500px]"
         >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           {isStreaming && !hasTextStarted && (
