@@ -35,7 +35,7 @@ services:
       POSTGRES_PASSWORD: promptbase
       POSTGRES_DB: promptbase
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:

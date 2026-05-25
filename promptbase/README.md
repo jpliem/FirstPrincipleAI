@@ -264,6 +264,128 @@ flowchart LR
 
 ---
 
+## Screenshots
+
+| | |
+|---|---|
+| **Chat with streaming response (Engineering team)** | **LLM provider registry** |
+| ![chat](docs/screenshots/07-streaming-mid.png) | ![providers](docs/screenshots/11-admin-providers.png) |
+| **Prompt pack admin — 11 packs, 296 modules** | **Team config — pack assignment + LLM model** |
+| ![packs](docs/screenshots/10-admin-packs.png) | ![teams](docs/screenshots/12-admin-teams.png) |
+
+Captured locally against an OpenAI-compatible llama.cpp endpoint serving a Qwen model. Provider URL in screenshot is a placeholder; the real value is set per deployment via `Admin → LLM Providers → Add`.
+
+---
+
+## Sample Walkthrough
+
+A real chat turn in the **Engineering** team using a 25-module Intercon prompt pack against a remote llama.cpp server.
+
+### Setup state
+
+- Team: `Engineering`
+- Pack: `intercon-v2` (25 modules: 7 core, 12 domain, 6 mode overlays)
+- Provider: `openai` type pointing at `https://llamacpp.example.com/v1`
+- Model: `qwen3.5:27b` (262k ctx)
+- Uploaded doc: `cold_chain_RFQ.pdf` (8 pages, parsed + chunked)
+
+### User message
+
+> *"Design an architecture for a cold-chain temperature sensor that uploads via LoRaWAN every 5 minutes, references the attached RFQ for constraints."*
+
+### Trace (server timing in ms)
+
+```
+0ms     /api/chat/stream                User message hits SSE endpoint
+3ms     Save user message               Persist to conversations table
+15ms    Load team LLM config            Engineering → Ollama-compatible, qwen3.5:27b, 262k ctx
+65ms    Provider /api/show              Confirm ctx size 262144 (cached after first call)
+70ms    Load prompt pack                25 modules from DB
+71ms    Classifier                      message keywords: "sensor", "LoRaWAN", "cold chain", "architecture"
+                                        → mode = "design"
+                                        → domains = ["embedded_iot"]
+75ms    Compiler — assemble system prompt
+        Core (always):
+          00_START_HERE.md                priority=100  layer=core
+          01_PROJECT_OVERVIEW.md          priority=100  layer=core
+          02_HOUSE_RULES.md               priority=100  layer=core
+          ...
+        Always-append:
+          16_ORG_CAPABILITY_MAP.md        priority=90   layer=always_append
+        Domain (matched):
+          17_EMBEDDED_IOT.md              priority=80   layer=domain (tags: sensor, lorawan, embedded)
+        Mode overlay:
+          modes["design"].prompt_text     → "Produce a layered architecture diagram + BOM + risk register..."
+        Document context:
+          cold_chain_RFQ.pdf              4 chunks (top-k semantic match), 1800 tokens
+120ms   Token budget
+        Assembled: 38,400 tokens (system) + 4,200 (history) + 1,800 (doc) = 44,400
+        Target ctx: 262,144 → fits, no trim
+122ms   Provider call                    qwen3.5:27b @ llamacpp endpoint, stream=true
+...     SSE streaming back to client     chunks flushed to /api/chat/stream subscribers
+8.4s    Stream complete                  ~3,200 output tokens
+8.5s    Persist assistant message        conversations + messages tables
+```
+
+### Output (assistant response, abbreviated)
+
+```markdown
+# Cold-Chain Temperature Sensor — Architecture
+
+## 1. Constraints (extracted from RFQ)
+- Operating range: -40°C to +25°C
+- Battery life: ≥ 3 years on 2× AA
+- Compliance: WHO PQS E003/RF05
+...
+
+## 2. Hardware Block Diagram
+| Block | Component | Rationale |
+|---|---|---|
+| Sensor | SHT45 | ±0.1°C, low power |
+| MCU | STM32WL55 | Integrated LoRa, sub-mA sleep |
+| Storage | 64Mbit SPI NOR | Buffer 90 days at 5-min interval |
+...
+## 3. Data Flow (LoRaWAN Class A)
+...
+## 4. Risk Register
+...
+## 5. Recommended Next Steps
+```
+
+### Why the output is structured this way
+
+The output sections (Constraints, Block Diagram, Data Flow, Risk Register, Next Steps) come from `17_EMBEDDED_IOT.md` — the domain module loaded only because the classifier matched IoT keywords. A different team using the same model with a different pack gets a totally different shape.
+
+The constraints come from `cold_chain_RFQ.pdf` because pgvector retrieval surfaced 4 chunks at compile time, injected before the assistant ever started reasoning. No "function call to read document" was needed.
+
+### Export
+
+User clicks **Export → DOCX**. Server:
+1. Loads message markdown
+2. mistune parses → AST
+3. DOCX renderer walks AST, applies team template (heading styles, table styles, branding)
+4. Returns `.docx` file
+
+User opens in Word — sections are real Heading 1/2/3, table is a real Word table, code blocks are styled code.
+
+### Debug — see compiled prompt
+
+`POST /api/chat/debug-compile` with the same payload returns:
+```json
+{
+  "system_prompt": "<full assembled text>",
+  "loaded_modules": ["00_START_HERE.md", "01_PROJECT_OVERVIEW.md", "...", "17_EMBEDDED_IOT.md"],
+  "mode": "design",
+  "domains": ["embedded_iot"],
+  "tokens": {"system": 38400, "history": 4200, "documents": 1800, "total": 44400, "ctx_limit": 262144},
+  "trimmed": []
+}
+```
+
+Useful when an assistant response disappoints — first place to look is whether the right modules loaded.
+
+---
+
 ## Components
 
 | Layer | Path | Role |
