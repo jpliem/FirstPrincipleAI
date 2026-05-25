@@ -6,6 +6,29 @@ Chat UI is the delivery surface. The product is the **compiler**.
 
 ---
 
+## Problem
+
+Organizations need AI that follows *their* rules — engineering standards, sales playbooks, compliance checklists, internal terminology — consistently across every conversation, every team, every model. The current options all fail:
+
+- **ChatGPT / Claude Projects:** one freeform system prompt textbox per project. No layering, no team isolation, no domain routing, no token budget visibility.
+- **Open WebUI / chat front-ends:** great chat, but system prompt is per-model, not per-team, and there's no concept of multi-module instruction packs.
+- **DIY prompt sprawl:** instructions copied into individual chats, drifting between teammates, impossible to version, no enforcement.
+
+The actual organizational instruction set is not one prompt — it's 20–30 markdown documents (project overview, capability map, domain frameworks, mode-specific guidance). Stuffing all of that into one system prompt blows the context window. Loading only some of it manually is what humans currently do, and it's the failure point.
+
+## Goal
+
+Build the missing layer between the model and the chat UI:
+
+1. **Modular prompt packs** — 25+ markdown modules with frontmatter (layer, priority, tags), versioned per team.
+2. **Per-request compilation** — every message triggers a fresh assembly: core layer always loaded, domain modules conditionally loaded by keyword match, mode-specific overlay added by intent classifier, uploaded docs injected, total trimmed to fit the target model's context window by priority.
+3. **Multi-team, multi-provider** — each team picks its pack + LLM provider (Ollama, OpenAI, Anthropic, OpenRouter) + model independently. Same user, multiple teams, no cross-bleed.
+4. **Structured output delivery** — markdown responses converted to DOCX/PDF with team styling, because that's how the organization actually consumes the output.
+
+The differentiator is the compiler, not the chat. *"How do you make AI consistently follow a multi-file instruction framework across teams and models with auto-routing per message?"*
+
+---
+
 ## TL;DR
 
 ```mermaid
