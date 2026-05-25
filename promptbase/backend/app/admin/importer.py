@@ -56,8 +56,11 @@ async def import_pack_from_zip(
                 manifest_path = name
                 break
 
+        # Prefer manifest name, then provided name
+        resolved_name = manifest.get("name") or pack_name
+
         pack = PromptPack(
-            name=pack_name,
+            name=resolved_name,
             version=manifest.get("version", "1.0.0"),
             description=manifest.get("description", ""),
             team_id=team_id,
@@ -86,7 +89,7 @@ async def import_pack_from_zip(
             module = PromptModule(
                 pack_id=pack.id,
                 filename=filename,
-                title=metadata.get("title", filename.replace("_", " ").replace(".md", "")),
+                title=metadata.get("title", _title_from_filename(filename)),
                 layer=layer,
                 tags=metadata.get("use_when", metadata.get("tags", [])),
                 priority=metadata.get("priority", 50 if layer == "domain" else 100),
@@ -110,6 +113,15 @@ async def import_pack_from_zip(
         await db.commit()
         await db.refresh(pack)
         return pack
+
+
+def _title_from_filename(filename: str) -> str:
+    """Convert '00_START_HERE.md' or 'subdir/01_FOO_BAR.md' to 'Start Here' or 'Foo Bar'."""
+    name = filename.split("/")[-1]          # strip directory
+    name = name.replace(".md", "")          # strip extension
+    name = re.sub(r"^\d+[_\-\s]*", "", name)  # strip leading number prefix
+    name = name.replace("_", " ").strip()   # underscores to spaces
+    return name.title() if name else filename.replace(".md", "")
 
 
 def _determine_layer(filename: str, manifest: dict) -> str:

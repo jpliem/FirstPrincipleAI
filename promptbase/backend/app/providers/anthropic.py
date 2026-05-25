@@ -13,7 +13,10 @@ MODEL_CONTEXT = {
 
 class AnthropicProvider(LLMProvider):
     async def stream_chat(self, system_prompt: str, messages: list[dict], config: LLMConfig) -> AsyncIterator[str]:
-        client = anthropic.AsyncAnthropic(api_key=config.api_key)
+        client_kwargs = {"api_key": config.api_key}
+        if config.base_url:
+            client_kwargs["base_url"] = config.base_url.rstrip("/")
+        client = anthropic.AsyncAnthropic(**client_kwargs)
         async with client.messages.stream(
             model=config.model, max_tokens=config.max_tokens, system=system_prompt,
             messages=messages, temperature=config.temperature,

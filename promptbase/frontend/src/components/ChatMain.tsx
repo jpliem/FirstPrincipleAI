@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useSSE, type ChatMeta } from '../hooks/useSSE'
@@ -7,16 +7,20 @@ import ChatMessage from './ChatMessage'
 import ChatInput from './ChatInput'
 import ExportButton from './ExportButton'
 import ProcessTimeline from './ProcessTimeline'
+import TypingIndicator from './TypingIndicator'
+import ErrorBanner from './ErrorBanner'
 
 interface Props {
-  team: Team
+  team: Team | null
   conversation: Conversation | null
   onConversationCreated: (conv: Conversation) => void
+  onConversationTitleChanged: (convId: string, title: string) => void
   activeMode: TaskMode | null
+  onModeChange: (mode: TaskMode | null) => void
   basicMode: boolean
 }
 
-export default function ChatMain({ team, conversation, onConversationCreated, activeMode, basicMode }: Props) {
+export default function ChatMain({ team, conversation, onConversationCreated, onConversationTitleChanged, activeMode, onModeChange, basicMode }: Props) {
   const queryClient = useQueryClient()
   const { startStream, cancel } = useSSE()
   const [isStreaming, setIsStreaming] = useState(false)
@@ -26,18 +30,29 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
   const hasTextStartedRef = useRef(false)
   const [conversationId, setConversationId] = useState<string | null>(conversation?.id ?? null)
   const [lastMeta, setLastMeta] = useState<ChatMeta | null>(null)
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Error handling state
+  const [error, setError] = useState<string | null>(null)
+  const lastSendArgsRef = useRef<{ text: string; formData?: Record<string, string>; docIds?: string[] } | null>(null)
+  const streamConvIdRef = useRef<string | null>(null)
+
+  const teamId = team?.id ?? null
+  const queryNs = teamId ?? 'personal'
+  const convQueryKey = ['conversations', queryNs]
 
   useEffect(() => {
     setConversationId(conversation?.id ?? null)
   }, [conversation])
 
   const { data: messages = [] } = useQuery<Message[]>({
-    queryKey: ['messages', team.id, conversationId],
+    queryKey: ['messages', queryNs, conversationId],
     enabled: !!conversationId,
     queryFn: async () => {
-      const res = await api.get(`/chat/conversations/${team.id}/${conversationId}/messages`)
+      const url = teamId
+        ? `/chat/conversations/${teamId}/${conversationId}/messages`
+        : `/chat/conversations/personal/${conversationId}/messages`
+      const res = await api.get(url)
       return res.data
     },
   })
@@ -46,7 +61,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamBuffer, thinkingBuffer])
 
-  const handleSend = async (text: string, formData?: Record<string, string>, docIds?: string[]) => {
+  const handleSend = useCallback(async (text: string, formData?: Record<string, string>, docIds?: string[]) => {
     let message = text
     if (formData && Object.keys(formData).length > 0) {
       const fields = Object.entries(formData)
@@ -54,6 +69,10 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         .join('\n')
       message = text ? `${text}\n\n${fields}` : fields
     }
+
+    // Store for retry
+    lastSendArgsRef.current = { text, formData, docIds }
+    setError(null)
 
     setIsStreaming(true)
     setStreamBuffer('')
@@ -70,14 +89,14 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
       created_at: new Date().toISOString(),
     }
     queryClient.setQueryData<Message[]>(
-      ['messages', team.id, conversationId],
+      ['messages', queryNs, conversationId],
       (old) => [...(old ?? []), tempUserMsg]
     )
 
     await startStream(
       {
         message,
-        team_id: team.id,
+        team_id: teamId,
         conversation_id: conversationId,
         document_ids: docIds ?? [],
         mode: activeMode?.name ?? null,
@@ -87,25 +106,17 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         onMeta: (meta) => {
           setLastMeta(meta)
           setConversationId(meta.conversation_id)
-          queryClient.invalidateQueries({ queryKey: ['conversations', team.id] })
+          streamConvIdRef.current = meta.conversation_id
+          queryClient.invalidateQueries({ queryKey: convQueryKey })
           if (!conversationId) {
             onConversationCreated({
               id: meta.conversation_id, title: message.slice(0, 60), mode: meta.mode_detected,
+              is_pinned: false,
               created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               message_count: 1,
             })
-            // Upload queued files now that conversation exists
-            if (pendingFiles.length > 0) {
-              for (const file of pendingFiles) {
-                const form = new FormData()
-                form.append('file', file)
-                api.post(`/documents/${team.id}/upload?conversation_id=${meta.conversation_id}`, form, {
-                  headers: { 'Content-Type': 'multipart/form-data' },
-                })
-              }
-              setPendingFiles([])
-            }
           }
+          // Files are now uploaded immediately on attach — no queued upload needed
         },
         onThinking: (token) => {
           setThinkingBuffer((prev) => prev + token)
@@ -117,6 +128,13 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
           }
           setStreamBuffer((prev) => prev + token)
         },
+        onTitleGenerated: (title) => {
+          const cid = streamConvIdRef.current
+          if (cid) {
+            onConversationTitleChanged(cid, title)
+            queryClient.invalidateQueries({ queryKey: convQueryKey })
+          }
+        },
         onDone: () => {
           setIsStreaming(false)
           setStreamBuffer('')
@@ -124,7 +142,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
           setHasTextStarted(false)
           hasTextStartedRef.current = false
           if (conversationId) {
-            queryClient.invalidateQueries({ queryKey: ['messages', team.id, conversationId] })
+            queryClient.invalidateQueries({ queryKey: ['messages', queryNs, conversationId] })
           }
         },
         onError: (err) => {
@@ -133,20 +151,21 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
           setThinkingBuffer('')
           setHasTextStarted(false)
           hasTextStartedRef.current = false
-          queryClient.setQueryData<Message[]>(
-            ['messages', team.id, conversationId],
-            (old) => [...(old ?? []), {
-              id: `error-${Date.now()}`,
-              role: 'assistant',
-              content: `**Error:** ${err}`,
-              token_count: 0,
-              created_at: new Date().toISOString(),
-            }]
-          )
+          setError(err)
         },
       }
     )
-  }
+  }, [teamId, queryNs, conversationId, convQueryKey, activeMode, basicMode, startStream, queryClient, onConversationCreated, onConversationTitleChanged])
+
+  const handleRetry = useCallback(() => {
+    if (lastSendArgsRef.current) {
+      const { text, formData, docIds } = lastSendArgsRef.current
+      setError(null)
+      handleSend(text, formData, docIds)
+    }
+  }, [handleSend])
+
+  const showTypingIndicator = isStreaming && !streamBuffer && !thinkingBuffer
 
   return (
     <div className="flex flex-col h-full">
@@ -157,7 +176,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
             {conversation?.title ?? 'New Conversation'}
           </h1>
           <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-            <span>{team.name}</span>
+            <span>{team?.name ?? 'Personal Chat'}</span>
             {lastMeta?.model && (
               <>
                 <span className="text-gray-400 dark:text-gray-700">&middot;</span>
@@ -167,13 +186,13 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
             {lastMeta?.mode_detected && (
               <>
                 <span className="text-gray-400 dark:text-gray-700">&middot;</span>
-                <span className="text-indigo-400">{lastMeta.mode_detected} mode</span>
+                <span className="text-indigo-600 dark:text-indigo-400">{lastMeta.mode_detected} mode</span>
               </>
             )}
             {activeMode && !lastMeta?.mode_detected && (
               <>
                 <span className="text-gray-400 dark:text-gray-700">&middot;</span>
-                <span className="text-indigo-400">{activeMode.name} mode</span>
+                <span className="text-indigo-600 dark:text-indigo-400">{activeMode.name} mode</span>
               </>
             )}
           </div>
@@ -211,6 +230,7 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         {!basicMode && isStreaming && lastMeta && (
           <ProcessTimeline meta={lastMeta} />
         )}
+        {showTypingIndicator && <TypingIndicator />}
         {isStreaming && (streamBuffer || thinkingBuffer) && (
           <ChatMessage
             message={{
@@ -228,15 +248,26 @@ export default function ChatMain({ team, conversation, onConversationCreated, ac
         <div ref={bottomRef} />
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <ErrorBanner
+          message={error}
+          onDismiss={() => setError(null)}
+          onRetry={handleRetry}
+        />
+      )}
+
       {/* Input */}
       <ChatInput
         onSend={handleSend}
         onCancel={cancel}
         isStreaming={isStreaming}
         activeMode={activeMode}
-        teamId={team.id}
+        onModeChange={onModeChange}
+        detectedMode={lastMeta?.mode_detected ?? null}
+        teamId={teamId}
         conversationId={conversationId}
-        onUploadQueued={(files) => setPendingFiles(files)}
+        basicMode={basicMode}
       />
     </div>
   )

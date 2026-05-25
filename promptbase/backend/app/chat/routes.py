@@ -13,10 +13,10 @@ from app.chat.schemas import (
     ChatRequest,
     ConversationListResponse,
     ConversationResponse,
+    ConversationUpdate,
     MessageResponse,
 )
-from app.chat.service import get_or_create_conversation, prepare_chat, stream_chat_response
-from app.config import settings
+from app.chat.service import generate_title, get_or_create_conversation, prepare_chat, stream_chat_response
 from app.database import get_db
 from app.providers.base import LLMConfig
 from app.providers.models import LLMProviderConfig, TeamLLMConfig
@@ -25,13 +25,11 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
 async def _load_llm_config(db: AsyncSession, team_id: uuid.UUID) -> tuple[str, LLMConfig]:
-    """Load LLM provider config for a team. Falls back to env defaults."""
-    # Try team-specific config first
+    """Load LLM provider config for a team from DB."""
     result = await db.execute(select(TeamLLMConfig).where(TeamLLMConfig.team_id == team_id))
     team_config = result.scalar_one_or_none()
 
     if team_config:
-        # Load provider's API key
         provider_result = await db.execute(
             select(LLMProviderConfig).where(LLMProviderConfig.name == team_config.provider_name)
         )
@@ -47,29 +45,25 @@ async def _load_llm_config(db: AsyncSession, team_id: uuid.UUID) -> tuple[str, L
             max_tokens=team_config.max_tokens_per_request,
         )
 
-    # Fallback: try to find any configured provider from env
-    if settings.anthropic_api_key:
-        return "anthropic", LLMConfig(
-            model="claude-sonnet-4-20250514",
-            api_key=settings.anthropic_api_key,
-            temperature=0.7, max_tokens=4096,
+    # No team config — fall back to first enabled DB provider
+    return await _load_default_provider(db)
+
+
+async def _load_default_provider(db: AsyncSession) -> tuple[str, LLMConfig]:
+    """Load first enabled provider from DB. Used for personal chat and team fallback."""
+    result = await db.execute(
+        select(LLMProviderConfig).where(LLMProviderConfig.is_enabled.is_(True))
+    )
+    provider = result.scalars().first()
+    if not provider:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No LLM provider configured. Set one up in Admin → Providers.",
         )
-    if settings.openai_api_key:
-        return "openai", LLMConfig(
-            model="gpt-4o",
-            api_key=settings.openai_api_key,
-            temperature=0.7, max_tokens=4096,
-        )
-    if settings.openrouter_api_key:
-        return "openrouter", LLMConfig(
-            model="anthropic/claude-sonnet-4-20250514",
-            api_key=settings.openrouter_api_key,
-            temperature=0.7, max_tokens=4096,
-        )
-    # Ollama doesn't need an API key
-    return "ollama", LLMConfig(
-        model="llama3",
-        base_url=settings.ollama_base_url,
+    return provider.name, LLMConfig(
+        model=provider.default_model or "default",
+        api_key=provider.api_key_encrypted or "",
+        base_url=provider.base_url or "",
         temperature=0.7, max_tokens=4096,
     )
 
@@ -80,21 +74,27 @@ async def chat_stream(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    role = await get_user_team_role(db, user.id, body.team_id)
-    if role is None and not user.is_super_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if body.team_id:
+        role = await get_user_team_role(db, user.id, body.team_id)
+        if role is None and not user.is_super_admin:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
     conversation = await get_or_create_conversation(
         db, body.conversation_id, body.team_id, user.id, body.mode, body.document_ids
     )
 
-    provider_name, llm_config = await _load_llm_config(db, body.team_id)
+    if body.team_id:
+        provider_name, llm_config = await _load_llm_config(db, body.team_id)
+    else:
+        provider_name, llm_config = await _load_default_provider(db)
 
     # Prepare: compile prompt, detect mode, calculate budget
     prepared = await prepare_chat(
         db, conversation, body.message, body.document_ids,
         provider_name, llm_config, basic_mode=body.basic_mode,
     )
+    # Commit conversation + user message so other requests (file upload, message fetch) can see them
+    await db.commit()
     compiled = prepared["compiled"]
 
     import json as _json
@@ -117,17 +117,43 @@ async def chat_stream(
         }
         yield f"data: {_json.dumps(meta)}\n\n"
 
+        full_text = ""
         try:
             async for event_type, content in stream_chat_response(
                 db, conversation, body.message, prepared,
             ):
                 escaped = content.replace("\n", "\\n")
                 yield f"data: {event_type}:{escaped}\n\n"
+                if event_type == "text":
+                    full_text += content
         except Exception as e:
             import traceback
             traceback.print_exc()
             yield f"data: [ERROR] {str(e)[:500]}\n\n"
-        yield "data: [DONE]\n\n"
+
+        # Auto-generate title after first exchange
+        new_title = None
+        try:
+            # Get document names for title context
+            doc_names = []
+            if body.document_ids:
+                from app.documents.models import Document
+                for did in body.document_ids:
+                    doc_result = await db.execute(select(Document).where(Document.id == did))
+                    doc = doc_result.scalar_one_or_none()
+                    if doc:
+                        doc_names.append(doc.filename)
+            new_title = await generate_title(
+                db, conversation, body.message, full_text,
+                provider_name, llm_config, document_names=doc_names,
+            )
+        except Exception:
+            pass
+
+        if new_title:
+            yield f"data: [DONE]{_json.dumps({'new_title': new_title})}\n\n"
+        else:
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -189,9 +215,63 @@ async def debug_compile(
     }
 
 
+@router.patch("/conversations/{conversation_id}")
+async def update_conversation(
+    conversation_id: uuid.UUID,
+    body: ConversationUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.id,
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    if body.title is not None:
+        conv.title = body.title[:500]
+    if body.is_pinned is not None:
+        conv.is_pinned = body.is_pinned
+    await db.commit()
+    await db.refresh(conv)
+    return ConversationResponse(
+        id=conv.id, title=conv.title, mode=conv.mode, is_pinned=conv.is_pinned,
+        created_at=conv.created_at, updated_at=conv.updated_at,
+    )
+
+
+@router.get("/conversations/personal", response_model=ConversationListResponse)
+async def list_personal_conversations(
+    q: str | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List conversations without a team (personal basic chat)."""
+    query = select(Conversation).where(
+        Conversation.team_id.is_(None), Conversation.user_id == user.id
+    )
+    if q:
+        query = query.where(Conversation.title.ilike(f"%{q}%"))
+    query = query.order_by(Conversation.is_pinned.desc(), Conversation.updated_at.desc())
+    result = await db.execute(query)
+    convs = result.scalars().all()
+    return ConversationListResponse(conversations=[
+        ConversationResponse(
+            id=c.id, title=c.title, mode=c.mode, is_pinned=c.is_pinned,
+            created_at=c.created_at, updated_at=c.updated_at,
+        )
+        for c in convs
+    ])
+
+
 @router.get("/conversations/{team_id}", response_model=ConversationListResponse)
 async def list_conversations(
     team_id: uuid.UUID,
+    q: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -199,19 +279,43 @@ async def list_conversations(
     if role is None and not user.is_super_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
-    result = await db.execute(
-        select(Conversation)
-        .where(Conversation.team_id == team_id, Conversation.user_id == user.id)
-        .order_by(Conversation.updated_at.desc())
+    query = select(Conversation).where(
+        Conversation.team_id == team_id, Conversation.user_id == user.id
     )
+    if q:
+        query = query.where(Conversation.title.ilike(f"%{q}%"))
+    query = query.order_by(Conversation.is_pinned.desc(), Conversation.updated_at.desc())
+    result = await db.execute(query)
     convs = result.scalars().all()
     return ConversationListResponse(conversations=[
         ConversationResponse(
-            id=c.id, title=c.title, mode=c.mode,
+            id=c.id, title=c.title, mode=c.mode, is_pinned=c.is_pinned,
             created_at=c.created_at, updated_at=c.updated_at,
         )
         for c in convs
     ])
+
+
+@router.delete("/conversations/personal/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_personal_conversation(
+    conversation_id: uuid.UUID,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.team_id.is_(None),
+            Conversation.user_id == user.id,
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    from sqlalchemy import delete as sa_delete
+    await db.execute(sa_delete(ConversationDocument).where(ConversationDocument.conversation_id == conversation_id))
+    await db.delete(conv)
+    await db.commit()
 
 
 @router.delete("/conversations/{team_id}/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -230,13 +334,64 @@ async def delete_conversation(
     if not conv:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    # Delete junction rows that have no cascade at DB level
     from sqlalchemy import delete as sa_delete
     await db.execute(
         sa_delete(ConversationDocument).where(ConversationDocument.conversation_id == conversation_id)
     )
     await db.delete(conv)
     await db.commit()
+
+
+import re
+
+DOC_HEADER_RE = re.compile(r'^### (.+)$', re.MULTILINE)
+DOC_PREFIX = "[Attached Documents]"
+
+
+def _format_message(msg: Message) -> MessageResponse:
+    """Extract attached filenames and clean display content from stored message."""
+    content = msg.content
+    display = content
+    files: list[str] = []
+
+    if msg.role == "user" and content.startswith(DOC_PREFIX):
+        # Split on the --- separator between docs and user text
+        parts = content.split("\n\n---\n\n", 1)
+        if len(parts) == 2:
+            doc_block, user_text = parts[0], parts[1]
+            files = DOC_HEADER_RE.findall(doc_block)
+            display = user_text
+        else:
+            # No separator found — just strip the prefix
+            display = content[len(DOC_PREFIX):].strip()
+
+    return MessageResponse(
+        id=msg.id, role=msg.role, content=content,
+        display_content=display, attached_files=files,
+        thinking_content=msg.thinking_content,
+        token_count=msg.token_count, created_at=msg.created_at,
+    )
+
+
+@router.get("/conversations/personal/{conversation_id}/messages", response_model=list[MessageResponse])
+async def get_personal_messages(
+    conversation_id: uuid.UUID,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.team_id.is_(None),
+            Conversation.user_id == user.id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    messages = await db.execute(
+        select(Message).where(Message.conversation_id == conversation_id).order_by(Message.created_at.asc())
+    )
+    return [_format_message(m) for m in messages.scalars().all()]
 
 
 @router.get("/conversations/{team_id}/{conversation_id}/messages", response_model=list[MessageResponse])
@@ -259,4 +414,4 @@ async def get_messages(
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at.asc())
     )
-    return messages.scalars().all()
+    return [_format_message(m) for m in messages.scalars().all()]

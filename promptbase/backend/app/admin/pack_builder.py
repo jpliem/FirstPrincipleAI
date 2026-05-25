@@ -165,10 +165,16 @@ Guidelines for modules:
 
 Output ONLY valid JSON. No explanation before or after."""
 
-GENERATE_WITH_SOURCE_PROMPT = """You are a prompt engineering expert. Based on the interview conversation and the existing pack modules below, generate an improved prompt pack.
+GENERATE_WITH_SOURCE_PROMPT = """You are a prompt engineering expert. Based on the interview conversation and the existing pack modules below, generate ONLY the new and modified modules.
 
 Existing modules:
 {source_modules}
+
+IMPORTANT RULES:
+- Do NOT re-emit modules that are unchanged. Only include modules you are adding or modifying.
+- For modified modules, include the full updated content (not a diff).
+- For new modules, assign sort_order values that place them logically (e.g. after existing modules, or between them).
+- Keep module titles consistent with the existing pack's naming convention.
 
 Output a JSON object with this exact structure:
 ```json
@@ -187,14 +193,11 @@ Output a JSON object with this exact structure:
 }}
 ```
 
-Include ALL modules — both unchanged ones from the source and new/modified ones.
-
 Guidelines for modules:
 - **core** layer: Foundational instructions loaded for every request. Priority 100.
 - **always** layer: Context always appended. Priority 90.
 - **domain** layer: Topic-specific instructions. Priority 50. Tags should contain 5-10 trigger keywords.
 - Each module's content should be detailed markdown.
-- sort_order: 0 for first module, increment by 1.
 
 Output ONLY valid JSON. No explanation before or after."""
 
@@ -238,7 +241,6 @@ async def builder_generate(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
     provider, config = await _get_llm(db, model_override=body.model)
-    config.max_tokens = 16384
     config.temperature = 0.5
 
     if body.source_pack_id:
@@ -250,6 +252,18 @@ async def builder_generate(
     messages = body.messages + [
         {"role": "user", "content": f"Based on our conversation, generate the prompt pack now. Name it '{body.pack_name}'."}
     ]
+
+    # Dynamic max_tokens: fill remaining context window
+    # For Ollama, fetch actual context size from the running model
+    if hasattr(provider, "fetch_context_size"):
+        context_limit = await provider.fetch_context_size(config.model, config.base_url)
+        config.max_context = context_limit
+    else:
+        context_limit = provider.max_context_tokens(config.model)
+    prompt_tokens = provider.count_tokens(system_prompt)
+    for m in messages:
+        prompt_tokens += provider.count_tokens(m.get("content", ""))
+    config.max_tokens = max(4096, context_limit - prompt_tokens - 256)
 
     async def event_stream():
         try:
@@ -280,6 +294,39 @@ async def builder_apply(
     db.add(pack)
     await db.flush()
 
+    module_count = 0
+
+    # If expanding, carry over source modules that aren't being replaced
+    if body.source_pack_id:
+        source_result = await db.execute(
+            select(PromptModule).where(PromptModule.pack_id == body.source_pack_id).order_by(PromptModule.sort_order)
+        )
+        source_modules = source_result.scalars().all()
+
+        # Collect titles of accepted new/modified modules
+        new_titles = set()
+        for idx in body.accepted_indices:
+            if 0 <= idx < len(body.modules):
+                new_titles.add(body.modules[idx].get("title", "").strip().lower())
+
+        # Copy source modules that aren't replaced by new ones
+        for sm in source_modules:
+            if sm.title.strip().lower() not in new_titles:
+                module = PromptModule(
+                    pack_id=pack.id,
+                    filename=sm.filename,
+                    title=sm.title,
+                    layer=sm.layer,
+                    tags=sm.tags or [],
+                    priority=sm.priority,
+                    content=sm.content,
+                    token_count=sm.token_count,
+                    sort_order=sm.sort_order,
+                )
+                db.add(module)
+                module_count += 1
+
+    # Add accepted new/modified modules
     for idx in body.accepted_indices:
         if idx < 0 or idx >= len(body.modules):
             continue
@@ -296,8 +343,9 @@ async def builder_apply(
             sort_order=mod_data.get("sort_order", idx),
         )
         db.add(module)
+        module_count += 1
 
     await db.commit()
     await db.refresh(pack)
 
-    return {"id": str(pack.id), "name": pack.name, "module_count": len(body.accepted_indices)}
+    return {"id": str(pack.id), "name": pack.name, "module_count": module_count}

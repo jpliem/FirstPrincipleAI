@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { User, Bot } from 'lucide-react'
+import { User, Bot, Copy, Check, FileText } from 'lucide-react'
 import type { Message } from '../types'
 import ExportButton from './ExportButton'
 import ThinkingBlock from './ThinkingBlock'
@@ -15,15 +16,34 @@ interface Props {
 export default function ChatMessage({ message, isStreaming = false, thinkingContent, hasTextStarted = true }: Props) {
   const isUser = message.role === 'user'
   const thinking = thinkingContent || message.thinking_content || ''
+  const displayText = message.display_content ?? message.content
+  const attachedFiles = message.attached_files ?? []
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(displayText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
-    <div className={`flex gap-3 px-4 py-4 ${isUser ? '' : 'bg-gray-100 dark:bg-gray-900/40'}`}>
+    <div className={`group/msg flex gap-3 px-4 py-4 ${isUser ? '' : 'bg-gray-100 dark:bg-gray-900/40'}`}>
       <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
         isUser ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'
       }`}>
         {isUser ? <User size={14} /> : <Bot size={14} />}
       </div>
       <div className="flex-1 min-w-0 space-y-1">
+        {isUser && attachedFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-1">
+            {attachedFiles.map((filename, i) => (
+              <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50">
+                <FileText size={10} />
+                {filename}
+              </span>
+            ))}
+          </div>
+        )}
         {!isUser && thinking && (
           <ThinkingBlock
             content={thinking}
@@ -54,7 +74,6 @@ export default function ChatMessage({ message, isStreaming = false, thinkingCont
                 </pre>
               ),
               code: ({ className, children }: any) => {
-                // Block code has a className like "language-xxx", inline code does not
                 const isBlock = /language-/.test(className || '')
                 if (isBlock) {
                   return <code className={className}>{children}</code>
@@ -67,16 +86,23 @@ export default function ChatMessage({ message, isStreaming = false, thinkingCont
               },
             }}
           >
-            {message.content}
+            {displayText}
           </ReactMarkdown>
           {isStreaming && (
             <span className="inline-block w-2 h-4 bg-indigo-400 animate-pulse ml-0.5" />
           )}
         </div>
-        {!isUser && !isStreaming && message.id && (
+        {!isStreaming && message.id && !message.id.startsWith('temp-') && (
           <div className="flex items-center gap-2 pt-1">
-            <span className="text-xs text-gray-400 dark:text-gray-600">{message.token_count} tokens</span>
-            <ExportButton messageId={message.id} />
+            {!isUser && <span className="text-xs text-gray-400 dark:text-gray-600">{message.token_count} tokens</span>}
+            <button
+              onClick={handleCopy}
+              className="opacity-0 group-hover/msg:opacity-100 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all"
+              title="Copy to clipboard"
+            >
+              {copied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+            </button>
+            {!isUser && <ExportButton messageId={message.id} />}
           </div>
         )}
       </div>

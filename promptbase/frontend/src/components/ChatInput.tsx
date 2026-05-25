@@ -6,6 +6,7 @@ import { useConversationDocs } from '../hooks/useDocumentStatus'
 import TaskForm from './TaskForm'
 import AttachButton from './AttachButton'
 import AttachedDocs from './AttachedDocs'
+import ModeChips from './ModeChips'
 import type { TaskMode, Document } from '../types'
 
 interface Props {
@@ -13,32 +14,58 @@ interface Props {
   onCancel: () => void
   isStreaming: boolean
   activeMode: TaskMode | null
-  teamId: string
+  onModeChange: (mode: TaskMode | null) => void
+  detectedMode: string | null
+  teamId: string | null
   conversationId: string | null
-  onUploadQueued: (files: File[]) => void
+  basicMode: boolean
 }
 
-export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, teamId, conversationId, onUploadQueued }: Props) {
+export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, onModeChange, detectedMode, teamId, conversationId, basicMode }: Props) {
   const [text, setText] = useState('')
   const [formData, setFormData] = useState<Record<string, string>>({})
-  const [queuedFiles, setQueuedFiles] = useState<File[]>([])
   const [attachedDocs, setAttachedDocs] = useState<Document[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const queryClient = useQueryClient()
   const { data: conversationDocs = [] } = useConversationDocs(conversationId)
 
-  // Sync attached docs from server
   useEffect(() => {
     if (conversationDocs.length > 0) {
       setAttachedDocs(conversationDocs)
     }
   }, [conversationDocs])
 
-  // Clear queued files when conversation changes
   useEffect(() => {
-    setQueuedFiles([])
     setAttachedDocs([])
   }, [conversationId])
+
+  // Poll processing docs until ready
+  const attachedDocsRef = useRef(attachedDocs)
+  attachedDocsRef.current = attachedDocs
+  const pendingCount = attachedDocs.filter((d) => d.status === 'pending' || d.status === 'processing').length
+
+  useEffect(() => {
+    if (pendingCount === 0) return
+
+    const interval = setInterval(async () => {
+      const current = attachedDocsRef.current
+      const updated = await Promise.all(
+        current.map(async (d) => {
+          if (d.status === 'ready' || d.status === 'failed') return d
+          try {
+            const base = teamId ? `/documents/${teamId}/${d.id}` : `/documents/personal/${d.id}`
+            const res = await api.get(base)
+            return res.data as Document
+          } catch {
+            return d
+          }
+        })
+      )
+      setAttachedDocs(updated)
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [pendingCount, teamId])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,16 +73,10 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, t
     if (!message && !activeMode?.form_schema) return
 
     const docIds = attachedDocs.filter((d) => d.status === 'ready').map((d) => d.id)
-
-    // If there are queued files, pass them up for upload after conversation creation
-    if (queuedFiles.length > 0) {
-      onUploadQueued(queuedFiles)
-      setQueuedFiles([])
-    }
-
     onSend(message, Object.keys(formData).length > 0 ? formData : undefined, docIds.length > 0 ? docIds : undefined)
     setText('')
     setFormData({})
+    setAttachedDocs([])
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -63,10 +84,6 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, t
       e.preventDefault()
       handleSubmit(e)
     }
-  }
-
-  const handleFileQueued = (file: File) => {
-    setQueuedFiles((prev) => [...prev, file])
   }
 
   const handleDocAttached = (doc: Document) => {
@@ -82,13 +99,10 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, t
       await api.delete(`/documents/conversation/${conversationId}/detach/${docId}`)
       queryClient.invalidateQueries({ queryKey: ['conversation-docs', conversationId] })
     } else if (!isLibrary && conversationId) {
-      await api.delete(`/documents/${teamId}/${docId}`)
+      const deleteBase = teamId ? `/documents/${teamId}/${docId}` : `/documents/personal/${docId}`
+      await api.delete(deleteBase)
       queryClient.invalidateQueries({ queryKey: ['conversation-docs', conversationId] })
     }
-  }
-
-  const handleRemoveQueued = (index: number) => {
-    setQueuedFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   const docPills = attachedDocs.map((d) => ({
@@ -100,23 +114,32 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, t
   }))
 
   return (
-    <div className="border-t border-gray-800 bg-gray-950 p-4">
+    <div className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-4">
       {activeMode?.form_schema && (
         <div className="mb-3">
           <TaskForm schema={activeMode.form_schema} values={formData} onChange={setFormData} />
         </div>
       )}
+      {/* Mode chips */}
+      {teamId && !basicMode && (
+        <ModeChips
+          teamId={teamId}
+          selectedMode={activeMode}
+          detectedMode={detectedMode}
+          onModeChange={onModeChange}
+        />
+      )}
       <AttachedDocs
         docs={docPills}
-        queuedFiles={queuedFiles}
+        queuedFiles={[]}
         onRemove={handleRemoveDoc}
-        onRemoveQueued={handleRemoveQueued}
+        onRemoveQueued={() => {}}
       />
       <form onSubmit={handleSubmit} className="flex gap-2 items-end">
         <AttachButton
           teamId={teamId}
           conversationId={conversationId}
-          onFileQueued={handleFileQueued}
+          onFileQueued={() => {}}
           onDocAttached={handleDocAttached}
           disabled={isStreaming}
         />
@@ -128,7 +151,7 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, t
           rows={1}
           disabled={isStreaming}
           placeholder={activeMode ? `${activeMode.name} — describe your request…` : 'Message…'}
-          className="flex-1 resize-none bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[44px] max-h-48 overflow-y-auto"
+          className="flex-1 resize-none bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[44px] max-h-48 overflow-y-auto"
           style={{ fieldSizing: 'content' } as any}
         />
         {isStreaming ? (
@@ -149,7 +172,7 @@ export default function ChatInput({ onSend, onCancel, isStreaming, activeMode, t
           </button>
         )}
       </form>
-      <p className="text-xs text-gray-600 mt-2 text-center">Enter to send · Shift+Enter for newline</p>
+      <p className="text-xs text-gray-400 dark:text-gray-600 mt-2 text-center">Enter to send · Shift+Enter for newline</p>
     </div>
   )
 }

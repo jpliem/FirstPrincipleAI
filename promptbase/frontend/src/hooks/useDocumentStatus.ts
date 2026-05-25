@@ -19,11 +19,13 @@ export function useDocuments(teamId: string) {
   })
 }
 
-export function useLibraryDocs(teamId: string) {
+export function useLibraryDocs(teamId: string | null) {
+  const key = teamId ?? 'personal'
+  const url = teamId ? `/documents/${teamId}/library` : '/documents/personal/library'
   return useQuery<Document[]>({
-    queryKey: ['library-docs', teamId],
+    queryKey: ['library-docs', key],
     queryFn: async () => {
-      const res = await api.get(`/documents/${teamId}/library`)
+      const res = await api.get(url)
       return res.data.documents
     },
     refetchInterval: (query) => {

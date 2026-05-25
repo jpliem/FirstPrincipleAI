@@ -92,6 +92,36 @@ async def load_pack_for_team(db: AsyncSession, team_id: uuid.UUID) -> dict | Non
     return {"modules": modules, "modes": modes, "condensed_core": pack.condensed_core}
 
 
+async def _gather_all_doc_ids(
+    db: AsyncSession,
+    conversation_id: uuid.UUID,
+    new_doc_ids: list[uuid.UUID],
+) -> list[uuid.UUID]:
+    """Get all document IDs for a conversation: direct uploads + library-attached + newly passed."""
+    from app.documents.models import Document
+
+    # Direct uploads (conversation_id set on the document)
+    direct = await db.execute(
+        select(Document.id).where(
+            Document.conversation_id == conversation_id,
+            Document.status == "ready",
+        )
+    )
+    direct_ids = set(direct.scalars().all())
+
+    # Library-attached via junction table
+    attached = await db.execute(
+        select(ConversationDocument.document_id).where(
+            ConversationDocument.conversation_id == conversation_id
+        )
+    )
+    attached_ids = set(attached.scalars().all())
+
+    # Combine all, including newly passed IDs
+    all_ids = direct_ids | attached_ids | set(new_doc_ids)
+    return list(all_ids)
+
+
 async def prepare_chat(
     db: AsyncSession,
     conversation: Conversation,
@@ -102,9 +132,19 @@ async def prepare_chat(
     basic_mode: bool = False,
 ) -> dict:
     """Prepare the chat: save user message, compile prompt, return metadata + ready state."""
+    # Inject document context into user message (only for newly attached docs)
+    doc_context = ""
+    if document_ids:
+        doc_context = await retrieve_document_context(db, document_ids, query_text=user_message)
+
+    if doc_context:
+        stored_message = f"[Attached Documents]\n\n{doc_context}\n\n---\n\n{user_message}"
+    else:
+        stored_message = user_message
+
     user_msg = Message(
         conversation_id=conversation.id, role="user",
-        content=user_message, token_count=count_tokens_approx(user_message),
+        content=stored_message, token_count=count_tokens_approx(stored_message),
     )
     db.add(user_msg)
     await db.flush()
@@ -129,19 +169,12 @@ async def prepare_chat(
     llm_config.max_context = context_limit
 
     if basic_mode:
-        # Skip prompt pack compilation — plain chat
-        doc_context = ""
-        if document_ids:
-            doc_context = await retrieve_document_context(db, document_ids, query_embedding=None)
-
         system_prompt = "You are a helpful assistant."
-        if doc_context:
-            system_prompt += f"\n\n## Reference Documents\n\n{doc_context}"
 
         history = await load_conversation_history(db, conversation.id, max_tokens=8000)
         history_tokens = sum(count_tokens_approx(m["content"]) for m in history)
         prompt_tokens = count_tokens_approx(system_prompt)
-        used_tokens = prompt_tokens + history_tokens + count_tokens_approx(user_message)
+        used_tokens = prompt_tokens + history_tokens + count_tokens_approx(stored_message)
         dynamic_max = max(1024, context_limit - used_tokens - 256)
         llm_config.max_tokens = min(llm_config.max_tokens, dynamic_max)
 
@@ -159,6 +192,7 @@ async def prepare_chat(
                 "core_mode": None,
             },
             "history": history,
+            "stored_message": stored_message,
             "context_limit": context_limit,
             "llm_config": llm_config,
         }
@@ -172,14 +206,10 @@ async def prepare_chat(
     else:
         compiler = PromptCompiler(modules=[], modes=[], model_context_limit=context_limit, condensed_core=None)
 
-    doc_context = ""
-    if document_ids:
-        doc_context = await retrieve_document_context(db, document_ids, query_embedding=None)
-
     history = await load_conversation_history(db, conversation.id, max_tokens=8000)
 
     compiled = compiler.compile(
-        user_text=user_message, mode=conversation.mode, doc_context=doc_context,
+        user_text=user_message, mode=conversation.mode, doc_context="",
         history_tokens=sum(count_tokens_approx(m["content"]) for m in history),
     )
 
@@ -193,6 +223,7 @@ async def prepare_chat(
         "provider": provider,
         "compiled": compiled,
         "history": history,
+        "stored_message": stored_message,
         "context_limit": context_limit,
         "llm_config": llm_config,
     }
@@ -216,7 +247,10 @@ async def stream_chat_response(
         yield ("text", "Error: Provider not found")
         return
 
-    messages = history + [{"role": "user", "content": user_message}]
+    # Use stored_message (includes doc context if any) for the current turn
+    # History already contains doc context from previous turns
+    stored_message = prepared.get("stored_message", user_message)
+    messages = history + [{"role": "user", "content": stored_message}]
     parser = ThinkTagParser()
 
     async for token in provider.stream_chat(compiled["system_prompt"], messages, llm_config):
@@ -237,3 +271,70 @@ async def stream_chat_response(
     )
     db.add(assistant_msg)
     await db.commit()
+
+
+async def generate_title(
+    db: AsyncSession,
+    conversation: Conversation,
+    user_message: str,
+    assistant_content: str,
+    provider_name: str,
+    llm_config: LLMConfig,
+    document_names: list[str] | None = None,
+) -> str | None:
+    """Generate an AI title for a conversation after the first exchange."""
+    from app.providers.registry import get_provider
+
+    # Only auto-name on the first exchange
+    result = await db.execute(
+        select(Message).where(Message.conversation_id == conversation.id)
+    )
+    msg_count = len(result.scalars().all())
+    if msg_count != 2:
+        return None
+
+    provider = get_provider(provider_name)
+    if not provider:
+        return None
+
+    # Build context with document names and response summary
+    context_parts = []
+    if document_names:
+        context_parts.append(f"Documents attached: {', '.join(document_names)}")
+    context_parts.append(f"User message: {user_message[:500]}")
+    context_parts.append(f"Assistant response summary: {assistant_content[:500]}")
+    context = "\n".join(context_parts)
+
+    prompt = (
+        "Generate a concise conversation title. If documents are attached, include the project name or document subject. "
+        "Include a date if one is mentioned. Keep it under 12 words. Reply with ONLY the title, no quotes, no explanation."
+    )
+    messages = [
+        {"role": "user", "content": f"{context}\n\nGenerate the title."},
+    ]
+
+    title_config = LLMConfig(
+        model=llm_config.model,
+        api_key=llm_config.api_key,
+        base_url=llm_config.base_url,
+        temperature=0.3,
+        max_tokens=100,
+    )
+
+    try:
+        title = ""
+        async for token in provider.stream_chat(prompt, messages, title_config):
+            title += token
+        # Strip thinking tags if model includes them
+        import re
+        title = re.sub(r'<think>.*?</think>', '', title, flags=re.DOTALL).strip()
+        title = title.strip().strip('"').strip("'").strip()
+        # Take first line only (in case model adds explanation)
+        title = title.split('\n')[0].strip()[:200]
+        if title and not title.startswith("["):
+            conversation.title = title
+            await db.commit()
+            return title
+    except Exception:
+        pass
+    return None

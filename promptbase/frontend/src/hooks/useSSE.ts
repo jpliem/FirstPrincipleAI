@@ -22,6 +22,7 @@ interface SSEOptions {
   onMeta: (meta: ChatMeta) => void
   onDone: () => void
   onError: (err: string) => void
+  onTitleGenerated?: (title: string) => void
 }
 
 export function useSSE() {
@@ -76,7 +77,18 @@ export function useSSE() {
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue
             const data = line.slice(6).trim()
-            if (data === '[DONE]') { opts.onDone(); return }
+            if (data.startsWith('[DONE]')) {
+              if (data.length > 6) {
+                try {
+                  const donePayload = JSON.parse(data.slice(6))
+                  if (donePayload.new_title) {
+                    opts.onTitleGenerated?.(donePayload.new_title)
+                  }
+                } catch {}
+              }
+              opts.onDone()
+              return
+            }
             if (data.startsWith('[ERROR]')) { opts.onError(data.slice(8)); opts.onDone(); return }
 
             // First event is metadata JSON

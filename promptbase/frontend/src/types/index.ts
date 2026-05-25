@@ -25,6 +25,7 @@ export interface Conversation {
   id: string
   title: string
   mode: string | null
+  is_pinned: boolean
   created_at: string
   updated_at: string
   message_count: number
@@ -34,6 +35,8 @@ export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  display_content?: string | null
+  attached_files?: string[]
   thinking_content?: string | null
   token_count: number
   created_at: string

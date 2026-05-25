@@ -47,15 +47,15 @@ export default function ExportDialog({ messageId, conversationId, onClose }: Pro
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-80 shadow-2xl">
+      <div className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-6 w-80 shadow-2xl">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-white">Export</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <h2 className="font-semibold text-gray-900 dark:text-white">Export</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
             <X size={18} />
           </button>
         </div>
 
-        <p className="text-sm text-gray-400 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           {messageId ? 'Export this message' : 'Export full conversation'}
         </p>
 
@@ -69,7 +69,7 @@ export default function ExportDialog({ messageId, conversationId, onClose }: Pro
                 onChange={() => setFormat(fmt)}
                 className="accent-indigo-500"
               />
-              <span className="text-sm text-gray-300">
+              <span className="text-sm text-gray-600 dark:text-gray-300">
                 {fmt === 'docx' ? 'Word Document (.docx)' : 'PDF (.pdf)'}
               </span>
             </label>
@@ -83,7 +83,7 @@ export default function ExportDialog({ messageId, conversationId, onClose }: Pro
         <div className="flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 text-sm text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+            className="flex-1 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
           >
             Cancel
           </button>

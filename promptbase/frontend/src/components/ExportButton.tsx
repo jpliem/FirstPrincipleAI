@@ -16,7 +16,7 @@ export default function ExportButton({ messageId, conversationId, label }: Props
       <button
         onClick={() => setOpen(true)}
         title="Export"
-        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-gray-800"
+        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
       >
         <Download size={12} />
         {label && <span>{label}</span>}

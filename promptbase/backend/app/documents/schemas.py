@@ -13,6 +13,7 @@ class DocumentResponse(BaseModel):
     progress: int = 0
     strategy: str | None
     token_count: int
+    error_message: str | None = None
     conversation_id: uuid.UUID | None = None
     created_at: datetime
 
