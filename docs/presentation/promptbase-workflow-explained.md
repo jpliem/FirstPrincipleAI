@@ -448,7 +448,7 @@ TIME    COMPONENT         ACTION
                           Team: "Engineering"
                           Provider: Ollama
                           Model: qwen3.5:27b
-                          Base URL: https://localhost/
+                          Base URL: http://localhost:11434/
 
 65ms    Context Fetch     Query Ollama /api/show for model context size
                           → 262,144 tokens (cached after first call)
@@ -657,7 +657,7 @@ Each team independently configures:
 |---------|----------------------|-----------------|
 | Provider | Ollama | OpenAI |
 | Model | qwen3.5:27b | gpt-4o |
-| Base URL | https://localhost/ | (default) |
+| Base URL | http://localhost:11434/ | (default) |
 | API Key | (not needed) | sk-proj-... |
 | Temperature | 0.7 | 0.5 |
 | Max Tokens | 25,000 | 4,096 |
